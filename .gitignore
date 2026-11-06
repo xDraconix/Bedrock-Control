@@ -1,0 +1,33 @@
+# Lokale Konfiguration und Zugangsdaten
+app/config/config.php
+config/config.php
+config/password.hash
+**/password.hash
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Lokale Zustands- und Minecraft-Daten
+backups/
+worlds/
+logs/
+storage/
+runtime/
+*.sqlite
+*.sqlite3
+*.log
+*.tar.gz
+
+# Generierte Dateien
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Lokale IDE-/Editor-Dateien
+.idea/
+.vscode/
