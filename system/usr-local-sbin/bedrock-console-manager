@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Restricted bridge to the existing mcserver GNU screen session."""
+import json, os, re, subprocess, sys, tempfile
+
+SESSION = 'mcbedrock'
+USER = 'mcserver'
+
+def reply(**kw):
+    print(json.dumps(kw, ensure_ascii=False))
+
+def screen(*args):
+    return subprocess.run(['/usr/sbin/runuser', '-u', USER, '--', '/usr/bin/screen', '-S', SESSION, '-X', *args], capture_output=True, text=True, timeout=8)
+
+def main():
+    if len(sys.argv) < 2: raise ValueError('Aktion fehlt')
+    action = sys.argv[1]
+    if action == 'tail':
+        if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
+        fd, path = tempfile.mkstemp(prefix='bedrock-screen-',dir='/run/bedrock-control-pro')
+        os.close(fd)
+        os.chown(path, __import__('pwd').getpwnam(USER).pw_uid, __import__('grp').getgrnam(USER).gr_gid)
+        os.chmod(path, 0o600)
+        try:
+            r = screen('-p', '0', 'hardcopy', '-h', path)
+            if r.returncode != 0: raise ValueError('SCREEN-Konsole nicht verfügbar: ' + r.stderr.strip()[:180])
+            with open(path, 'r', encoding='utf-8', errors='replace') as f: data = f.read()[-32000:]
+            reply(ok=True, logs=data)
+        finally:
+            os.unlink(path)
+    elif action == 'send':
+        if len(sys.argv) != 4: raise ValueError('Ungültige Parameter')
+        kind, value = sys.argv[2:]
+        if kind == 'list' and value == '': command = 'list'
+        elif kind in ('day','night') and value == '': command = 'time set ' + kind
+        elif kind == 'say':
+            if not (1 <= len(value) <= 180) or any(ord(c) < 32 or ord(c) == 127 for c in value): raise ValueError('Ungültige Nachricht')
+            command = 'say ' + value
+        elif kind in ('kick','ban','pardon'):
+            if not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}', value) or value.strip() != value: raise ValueError('Ungültiger Spielername')
+            command = kind + ' "' + value + '"'
+        else: raise ValueError('Nicht erlaubter Befehl')
+        if subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode != 0: raise ValueError('Minecraft ist nicht gestartet')
+        # GNU screen's stuff sends literal characters; newline is a separate carriage return.
+        r = screen('stuff', command + '\r')
+        if r.returncode: raise ValueError('SCREEN-Befehl fehlgeschlagen: ' + r.stderr.strip()[:180])
+        reply(ok=True, message='Befehl an Minecraft-Konsole gesendet (Ausführung nicht bestätigt).')
+    else: raise ValueError('Unbekannte Aktion')
+
+try:
+    main()
+except (ValueError, subprocess.TimeoutExpired, OSError) as e:
+    reply(error=str(e))
+    sys.exit(1)

@@ -1,0 +1,8 @@
+<?php
+return [
+ 'service'=>'mcbedrock.service',
+ 'server_dir'=>'/home/mcserver/minecraft_bedrock',
+ 'backup_dir'=>'/home/mcserver/backups',
+ 'update_script'=>'/root/update-mc2.sh',
+ 'version_endpoint'=>'https://net-secondary.web.minecraft-services.net/api/v1.0/download/links',
+];

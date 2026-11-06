@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+umask 027
+SERVER=/home/mcserver/minecraft_bedrock
+BASE=/home/mcserver
+LOG=/var/log/bedrock-panel-setup.log
+API=https://net-secondary.web.minecraft-services.net/api/v1.0/download/links
+[[ $EUID -eq 0 && $# -eq 1 ]] || exit 2
+[[ "$1" =~ ^[a-f0-9]{32}$ ]] || exit 2
+JOB="$1"
+JOBFILE="/run/bedrock-panel-jobs/setup-${JOB}.json"
+CONFIG="/run/bedrock-panel-jobs/setup-${JOB}.input"
+[[ -f "$CONFIG" && -f "$JOBFILE" ]] || exit 2
+exec 8>/run/bedrock-panel-jobs/.setup-exclusive
+flock -n 8 || { echo 'Eine Installation läuft bereits.' >&2; exit 1; }
+update_status() {
+  local state="$1" message="$2"
+  /usr/bin/python3 - "$JOBFILE" "$state" "$message" <<'PYJSON'
+import json,os,sys,tempfile
+path,state,message=sys.argv[1:]
+with open(path,'w',encoding='utf-8') as f:
+ json.dump({'state':state,'message':message},f,ensure_ascii=False)
+os.chmod(path,0o640)
+os.chown(path,0,__import__('grp').getgrnam('www-data').gr_gid)
+PYJSON
+}
+cleanup() {
+  local code=$?
+  rm -f "$CONFIG"
+  if (( code != 0 )); then
+    update_status failed "Installation fehlgeschlagen (Exit $code). Details: $LOG"
+  fi
+}
+trap cleanup EXIT
+update_status running 'Download wird vorbereitet ...'
+# Validate all inputs, including path safety, before privileged operations.
+python3 - "$CONFIG" <<'PYVALID'
+import json,sys,re
+with open(sys.argv[1]) as f: d=json.load(f)
+expected={'server_name','world_name','gamemode','difficulty','port','max_players'}
+assert set(d)==expected,'Unerwartete Konfigurationsschlüssel'
+for key in ('server_name','world_name'):
+ v=d[key];assert isinstance(v,str) and 1<=len(v)<=64 and re.fullmatch(r'[A-Za-z0-9 _.-]+',v),key
+assert d['gamemode'] in ('survival','creative','adventure')
+assert d['difficulty'] in ('peaceful','easy','normal','hard')
+assert type(d['port']) is int and 1024<=d['port']<=65534
+assert type(d['max_players']) is int and 1<=d['max_players']<=100
+PYVALID
+if [[ -e "$SERVER" || -e /etc/systemd/system/mcbedrock.service ]]; then
+  echo 'Bestehende Minecraft-Installation erkannt. Keine Überschreibung.' >&2; exit 1
+fi
+TMP=$(mktemp -d /var/tmp/bedrock-setup.XXXXXXXX)
+trap 'code=$?; rm -rf -- "$TMP"; exit "$code"' EXIT
+update_status running 'Offizielle Minecraft-Downloadadresse wird ermittelt ...'
+curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 "$API" -o "$TMP/links.json"
+URL=$(python3 - "$TMP/links.json" <<'PYURL'
+import json,re,sys
+from urllib.parse import urlparse
+with open(sys.argv[1]) as f: obj=json.load(f)
+found=[]
+def scan(x):
+ if isinstance(x,dict):
+  for v in x.values():scan(v)
+ elif isinstance(x,list):
+  for v in x:scan(v)
+ elif isinstance(x,str):
+  for url in re.findall(r'https://[^\s"<>]+',x):
+   url=url.rstrip('),;')
+   p=urlparse(url)
+   if p.hostname in ('minecraft.net','www.minecraft.net') and re.fullmatch(r'/bedrockdedicatedserver/bin-linux/bedrock-server-\d+(?:\.\d+)+\.zip',p.path):found.append(url)
+scan(obj)
+if not found:sys.exit('Offizielle Downloadadresse nicht gefunden')
+print(max(found,key=lambda x:tuple(map(int,re.search(r'bedrock-server-([\d.]+)\.zip',x).group(1).split('.')))))
+PYURL
+)
+VERSION=$(sed -E 's/.*bedrock-server-([0-9.]+)\.zip.*/\1/' <<< "$URL")
+update_status running "Minecraft $VERSION wird heruntergeladen ..."
+curl -fL --retry 3 --connect-timeout 15 --max-time 900 -A 'Mozilla/5.0' "$URL" -o "$TMP/server.zip"
+update_status running 'Archiv wird geprüft und entpackt ...'
+python3 - "$TMP/server.zip" "$TMP/extract" <<'PYZIP'
+import zipfile,sys,pathlib,stat
+archive,target=sys.argv[1:]; dest=pathlib.Path(target);dest.mkdir()
+with zipfile.ZipFile(archive) as z:
+ names=z.namelist()
+ assert 'bedrock_server' in names and 'server.properties' in names,'Serverdateien fehlen'
+ assert sum(x.file_size for x in z.infolist()) < 2_000_000_000,'Archiv zu groß'
+ for item in z.infolist():
+  p=pathlib.PurePosixPath(item.filename)
+  assert not p.is_absolute() and '..' not in p.parts and '\\' not in item.filename,'Unsicherer Archivpfad'
+  assert not stat.S_ISLNK(item.external_attr >> 16),'Symlink im Archiv'
+ z.extractall(dest)
+PYZIP
+if ! id mcserver >/dev/null 2>&1; then
+  useradd --system --create-home --home-dir "$BASE" --shell /usr/sbin/nologin mcserver
+fi
+install -d -o mcserver -g mcserver -m 0750 "$BASE/backups"
+# Install atomically into the final directory; no overwriting an existing server.
+[[ ! -e "$SERVER" ]] || exit 1
+mv "$TMP/extract" "$SERVER"
+chown -R mcserver:mcserver "$SERVER"
+chmod 0750 "$SERVER/bedrock_server"
+install -m 0750 -o mcserver -g mcserver /usr/local/share/bedrock-control-pro/start_server.sh "$SERVER/start_server.sh"
+install -m 0750 -o mcserver -g mcserver /usr/local/share/bedrock-control-pro/stop_server.sh "$SERVER/stop_server.sh"
+python3 - "$CONFIG" "$SERVER/server.properties" <<'PYPROPS'
+import json,sys
+with open(sys.argv[1]) as f:d=json.load(f)
+path=sys.argv[2]
+changes={'server-name':d['server_name'],'level-name':d['world_name'],'gamemode':d['gamemode'],'difficulty':d['difficulty'],'server-port':str(d['port']),'server-portv6':str(d['port']+1),'max-players':str(d['max_players'])}
+lines=open(path).readlines();seen=set();out=[]
+for line in lines:
+ if '=' in line and not line.lstrip().startswith('#'):
+  key=line.split('=',1)[0].strip()
+  if key in changes:
+   out.append(key+'='+changes[key]+'\n');seen.add(key);continue
+ out.append(line)
+for key,val in changes.items():
+ if key not in seen:out.append(key+'='+val+'\n')
+with open(path,'w') as f:f.writelines(out)
+PYPROPS
+printf '%s\n' "$VERSION" > "$SERVER/.installed-bedrock-version"
+chown mcserver:mcserver "$SERVER/.installed-bedrock-version" "$SERVER/server.properties"
+# Apply read-only ACLs after configuration creation, before the server starts.
+/usr/local/sbin/bedrock-config-access
+install -m 0644 /usr/local/share/bedrock-control-pro/mcbedrock.service /etc/systemd/system/mcbedrock.service
+/usr/local/sbin/bedrock-service-configure
+systemctl enable mcbedrock.service
+update_status running 'Minecraft-Dienst wird gestartet ...'
+systemctl start mcbedrock.service
+update_status success "Minecraft $VERSION installiert. Dienst gestartet; NetherNet-Status im Dashboard prüfen."

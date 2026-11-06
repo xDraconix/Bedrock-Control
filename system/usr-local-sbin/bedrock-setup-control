@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[[ $EUID -eq 0 && $# -eq 2 && "$1" == install ]] || exit 2
+[[ "$2" =~ ^[A-Za-z0-9+/=]{1,8192}$ ]] || exit 2
+[[ ! -e /home/mcserver/minecraft_bedrock && ! -e /etc/systemd/system/mcbedrock.service ]] || { echo 'Minecraft bereits vorhanden.' >&2; exit 1; }
+install -d -m 0750 -o root -g www-data /run/bedrock-panel-jobs
+exec 9>/run/bedrock-panel-jobs/.setup-admission
+flock -n 9 || { echo 'Eine Installation wird bereits vorbereitet.' >&2; exit 1; }
+if systemctl is-active --quiet bedrock-panel-setup.service; then
+  echo 'Eine Minecraft-Installation läuft bereits.' >&2; exit 1
+fi
+JOB=$(cat /proc/sys/kernel/random/uuid | tr -d -)
+INPUT=/run/bedrock-panel-jobs/setup-${JOB}.input
+printf '%s' "$2" | base64 -d > "$INPUT"
+chown root:root "$INPUT";chmod 0600 "$INPUT"
+python3 -m json.tool "$INPUT" >/dev/null || { rm -f "$INPUT"; exit 1; }
+printf '{"state":"queued","message":"Installation vorgemerkt"}\n' > /run/bedrock-panel-jobs/setup-${JOB}.json
+chown root:www-data /run/bedrock-panel-jobs/setup-${JOB}.json
+chmod 0640 /run/bedrock-panel-jobs/setup-${JOB}.json
+if ! systemd-run --unit=bedrock-panel-setup --collect --property=Type=exec -- /usr/local/sbin/bedrock-setup-worker "$JOB"; then
+  rm -f "$INPUT" /run/bedrock-panel-jobs/setup-${JOB}.json; exit 1
+fi
+printf 'JOB_ID=%s\n' "$JOB"

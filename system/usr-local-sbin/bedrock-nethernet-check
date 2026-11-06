@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+PROPERTIES=/home/mcserver/minecraft_bedrock/server.properties
+STOP=/home/mcserver/minecraft_bedrock/stop_server.sh
+if [[ ! -f "$PROPERTIES" || ! -r "$PROPERTIES" ]]; then
+  echo "[NetherNet] FEHLER: server.properties fehlt oder ist nicht lesbar: $PROPERTIES" >&2
+  exit 1
+fi
+PORT="$(awk -F= '/^[[:space:]]*server-port[[:space:]]*=/ {p=$2; sub(/[[:space:]#;].*$/, "", p); gsub(/[[:space:]]/, "", p)} END {print p}' "$PROPERTIES")"
+if [[ ! "$PORT" =~ ^[0-9]+$ ]] || ((10#$PORT < 1 || 10#$PORT > 65535)); then
+  echo '[NetherNet] FEHLER: server-port fehlt oder ist ungültig.' >&2
+  exit 1
+fi
+PORT=$((10#$PORT))
+URL="http://127.0.0.1:${PORT}/v1/join"
+echo "[NetherNet] Warte maximal 90s auf Bereitschaft (Port ${PORT}) ..."
+SUCCESS_COUNT=0
+for ((i=1;i<=90;i++)); do
+  HTTP_CODE="$(/usr/bin/curl --silent --output /dev/null --max-time 1 --write-out '%{http_code}' "$URL" || true)"
+  if [[ "$HTTP_CODE" == 200 ]]; then
+    SUCCESS_COUNT=$((SUCCESS_COUNT+1))
+    if ((SUCCESS_COUNT >= 2)); then
+      echo "[NetherNet] Bereit! HTTP 200 auf Port ${PORT} bestätigt."
+      exit 0
+    fi
+  else
+    SUCCESS_COUNT=0
+  fi
+  /usr/bin/sleep 1
+done
+echo "[NetherNet] FEHLER: Port ${PORT} nach 90s nicht bereit." >&2
+if [[ -x "$STOP" ]]; then
+  echo '[NetherNet] Stoppe Minecraft kontrolliert ...' >&2
+  "$STOP" || echo '[NetherNet] WARNUNG: Sauberes Stoppen fehlgeschlagen.' >&2
+fi
+exit 1

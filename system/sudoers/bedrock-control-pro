@@ -1,0 +1,1 @@
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/bedrock-panel-control, /usr/local/sbin/bedrock-addon-manager, /usr/local/sbin/bedrock-console-manager, /usr/local/sbin/bedrock-world-manager, /usr/local/sbin/bedrock-properties-manager, /usr/local/sbin/bedrock-setup-control

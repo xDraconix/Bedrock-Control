@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+"""Restricted root helper for Bedrock world add-ons. Never accepts arbitrary paths."""
+import json, os, sys, zipfile, shutil, tempfile, pathlib, uuid, re, subprocess, datetime
+BASE=pathlib.Path('/home/mcserver/minecraft_bedrock')
+INBOX=pathlib.Path('/var/lib/bedrock-panel/uploads')
+MAX_UNCOMPRESSED=300*1024*1024
+MAX_FILES=20000
+
+def fail(msg):
+    print(json.dumps({'error':msg},ensure_ascii=False));sys.exit(1)
+def load(p, default=None):
+    if not p.exists():return default
+    with p.open(encoding='utf-8-sig') as f:return json.load(f)
+def save(p,data):
+    p.parent.mkdir(parents=True,exist_ok=True)
+    tmp=p.with_name(p.name+'.tmp-'+uuid.uuid4().hex)
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    os.chown(tmp,pwd.getpwnam('mcserver').pw_uid,grp.getgrnam('mcserver').gr_gid)
+    tmp.replace(p)
+# module os does not provide getpwnam/getgrnam
+import pwd,grp
+
+def world():
+    props=(BASE/'server.properties').read_text(encoding='utf-8')
+    match=re.search(r'^level-name=(.+)$',props,re.M)
+    if not match:fail('level-name fehlt')
+    name=match.group(1).strip().rstrip('\r')
+    w=BASE/'worlds'/name
+    if not w.is_dir() or w.is_symlink():fail('Weltverzeichnis nicht gefunden')
+    return w
+
+def translated(value, folder, fallback):
+    """Resolve Bedrock manifest localization keys without executing pack content."""
+    value = str(value or '').strip()
+    if value and not re.fullmatch(r'(pack\.(name|description)|[a-z_]+\.[a-z_.]+)', value, re.I):
+        return value[:160]
+    texts = folder/'texts'
+    for language in ('de_DE.lang','en_US.lang','en_GB.lang'):
+        langfile = texts/language
+        if not langfile.is_file() or langfile.is_symlink():continue
+        try:
+            if langfile.stat().st_size > 1024*1024:continue
+            for line in langfile.read_text(encoding='utf-8-sig',errors='replace').splitlines():
+                line=line.strip()
+                if not line or line.startswith('#') or '=' not in line:continue
+                key, text = line.split('=',1)
+                if key.strip()==value and text.strip():
+                    return text.split('\t',1)[0].strip()[:160]
+        except OSError:continue
+    return fallback[:160]
+
+def pack_category(folder, active):
+    if active:return 'active'
+    # Only clearly named vanilla/system directories are categorized as system.
+    name=folder.lower()
+    if name.startswith(('vanilla','minecraft_','education_','experimental_')) or name in ('minecraft','vanilla'):
+        return 'system'
+    return 'other'
+
+def normalize_version(version):
+    if isinstance(version, str):
+        parts = version.split('.')
+        if len(parts) != 3 or not all(p.isdecimal() for p in parts):
+            return None
+        version = [int(p) for p in parts]
+    if (not isinstance(version, list) or len(version) != 3
+            or not all(type(n) is int and n >= 0 for n in version)):
+        return None
+    return version
+
+def packs():
+    w=world(); result=[]
+    for kind,folder,setting in [('behavior','behavior_packs','world_behavior_packs.json'),('resource','resource_packs','world_resource_packs.json')]:
+        enabled=load(w/setting,[]) or []
+        for p in sorted((BASE/folder).iterdir() if (BASE/folder).exists() else []):
+            if not p.is_dir() or p.is_symlink():continue
+            try:
+                m=load(p/'manifest.json',{}) or {};h=m['header'];uid=str(uuid.UUID(h['uuid']));version=normalize_version(h['version'])
+                if version is None:continue
+                active=any(str(x.get('pack_id','')).lower()==uid.lower() and x.get('version')==version for x in enabled if isinstance(x,dict))
+                result.append({'kind':kind,'folder':p.name,'uuid':uid,'version':version,'name':translated(h.get('name'),p,p.name),'description':translated(h.get('description'),p,''),'active':active,'category':pack_category(p.name,active),'dependencies':m.get('dependencies',[])})
+            except (ValueError,KeyError,TypeError,UnicodeError,json.JSONDecodeError):continue
+    counts={}
+    for item in result:
+        key=(item['kind'],item['uuid'])
+        counts[key]=counts.get(key,0)+1
+    for item in result:item['duplicate']=counts[(item['kind'],item['uuid'])]>1
+    result.sort(key=lambda x:(not x['active'],x['category']!='other',x['name'].casefold(),x['kind'],x['version']))
+    return result
+
+def stopped():
+    if subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode==0:fail('Bitte Minecraft vor Änderungen stoppen.')
+
+def backup_world(w):
+    stamp=datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    backup=w/'.addon-manager-backups';backup.mkdir(exist_ok=True)
+    for name in ('world_behavior_packs.json','world_resource_packs.json'):
+        f=w/name
+        if f.exists():shutil.copy2(f,backup/(stamp+'-'+name))
+
+def change(kind,uid,enable):
+    stopped(); w=world()
+    matching=[p for p in packs() if p['kind']==kind and p['uuid']==uid]
+    if len(matching)!=1:fail('Paket nicht eindeutig gefunden (mehrere Versionen derselben UUID). Bitte zuerst die Duplikate auf dem Server prüfen.')
+    p=matching[0];filename='world_behavior_packs.json' if kind=='behavior' else 'world_resource_packs.json'
+    target=w/filename;entries=load(target,[]) or []
+    if not isinstance(entries,list):fail('Ungültige Welt-Paketliste')
+    entries=[x for x in entries if not (isinstance(x,dict) and str(x.get('pack_id','')).lower()==uid.lower())]
+    if enable:entries.append({'pack_id':uid,'version':p['version']})
+    backup_world(w);save(target,entries)
+    print(json.dumps({'ok':True,'message':'Weltzuordnung aktualisiert. Server kann gestartet werden.'}))
+
+def install(token):
+    stopped()
+    if not re.fullmatch(r'[a-f0-9]{32}',token):fail('Ungültiger Upload')
+    source=INBOX/(token+'.zip')
+    if not source.is_file() or source.is_symlink():fail('Upload fehlt')
+    stage=pathlib.Path(tempfile.mkdtemp(prefix='bedrock-addon-',dir='/var/tmp'))
+    installed=[]
+    try:
+        with zipfile.ZipFile(source) as z:
+            files=z.infolist()
+            if len(files)>MAX_FILES or sum(i.file_size for i in files)>MAX_UNCOMPRESSED:fail('Archiv zu groß')
+            for info in files:
+                n=info.filename.replace('\\','/')
+                parts=pathlib.PurePosixPath(n).parts
+                if not n or n.startswith('/') or '..' in parts or ':' in n or info.flag_bits & 0x1:fail('Unsicheres Archiv')
+                mode=(info.external_attr>>16)&0o170000
+                if mode not in (0,0o040000,0o100000):fail('Links und Sonderdateien sind nicht erlaubt')
+                dest=stage.joinpath(*parts)
+                if info.is_dir():dest.mkdir(parents=True,exist_ok=True);continue
+                dest.parent.mkdir(parents=True,exist_ok=True)
+                with z.open(info) as src,dest.open('wb') as dst:shutil.copyfileobj(src,dst)
+        manifests=list(stage.rglob('manifest.json'))
+        candidates=[]
+        for mpath in manifests:
+            m=load(mpath);h=m['header'];uid=str(uuid.UUID(h['uuid']))
+            version=normalize_version(h['version'])
+            if version is None:continue
+            modules=m.get('modules',[])
+            kinds=set()
+            for mod in modules:
+                if mod.get('type') in ('data','script'):kinds.add('behavior')
+                if mod.get('type')=='resources':kinds.add('resource')
+            for kind in kinds:candidates.append((kind,uid,mpath.parent))
+        if not candidates:fail('Kein gültiges Bedrock-Manifest gefunden')
+        if len(candidates)>12:fail('Zu viele Pakete')
+        existing=packs()
+        for kind,uid,src in candidates:
+            if any(p['uuid']==uid and p['kind']==kind for p in existing):fail('Paket bereits vorhanden: '+uid+' (bitte zunächst manuell aktualisieren)')
+            targetbase=BASE/('behavior_packs' if kind=='behavior' else 'resource_packs')
+            targetbase.mkdir(exist_ok=True)
+            dest=targetbase/('panel-'+uid)
+            if dest.exists():fail('Zielverzeichnis existiert bereits')
+            shutil.copytree(src,dest,symlinks=False)
+            for root,dirs,files in os.walk(dest):
+                os.chown(root,pwd.getpwnam('mcserver').pw_uid,grp.getgrnam('mcserver').gr_gid)
+                for name in files:os.chown(os.path.join(root,name),pwd.getpwnam('mcserver').pw_uid,grp.getgrnam('mcserver').gr_gid)
+            installed.append({'kind':kind,'uuid':uid})
+        print(json.dumps({'ok':True,'installed':installed,'message':'Pakete installiert. Bitte in der Welt aktivieren.'}))
+    except Exception:
+        for item in installed:
+            folder='behavior_packs' if item['kind']=='behavior' else 'resource_packs'
+            shutil.rmtree(BASE/folder/('panel-'+item['uuid']),ignore_errors=True)
+        raise
+    finally:
+        shutil.rmtree(stage,ignore_errors=True)
+        source.unlink(missing_ok=True)
+
+def main():
+    if len(sys.argv)<2:fail('Aktion fehlt')
+    cmd=sys.argv[1]
+    if cmd=='list' and len(sys.argv)==2:print(json.dumps({'world':world().name,'packs':packs()},ensure_ascii=False))
+    elif cmd=='install' and len(sys.argv)==3:install(sys.argv[2])
+    elif cmd in ('enable','disable') and len(sys.argv)==4:
+        kind,uid=sys.argv[2:]
+        if kind not in ('behavior','resource'):fail('Ungültiger Pakettyp')
+        try:uid=str(uuid.UUID(uid))
+        except ValueError:fail('Ungültige UUID')
+        change(kind,uid,cmd=='enable')
+    else:fail('Ungültige Aktion')
+if __name__=='__main__':
+    try:main()
+    except Exception as e:fail(str(e))

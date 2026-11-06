@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+import subprocess
+"""Restricted world selection helper. Never starts/stops Minecraft."""
+import json, os, pathlib, re, sys, tempfile, subprocess, shutil, zipfile, tarfile, time, uuid, stat
+BASE=pathlib.Path('/home/mcserver/minecraft_bedrock')
+WORLDS=BASE/'worlds'
+PROPS=BASE/'server.properties'
+
+def fail(message):
+    print(json.dumps({'error':message},ensure_ascii=False));sys.exit(1)
+
+def current():
+    try: data=PROPS.read_text(encoding='utf-8')
+    except OSError: fail('server.properties kann nicht gelesen werden')
+    matches=re.findall(r'^level-name=(.*)\r?$',data,re.M)
+    if len(matches)!=1: fail('level-name muss genau einmal in server.properties vorkommen')
+    return matches[0],data
+
+def valid_name(name):
+    return (isinstance(name,str) and 1<=len(name)<=80 and name==name.strip()
+        and name not in ('.','..') and not any(c in name for c in '/\\:\x00\r\n')
+        and not any(ord(c)<32 for c in name))
+
+def safe_world(name):
+    if not valid_name(name): fail('Ungültiger Weltname')
+    p=WORLDS/name
+    if p.is_symlink() or not p.is_dir(): fail('Weltverzeichnis existiert nicht oder ist ein Link')
+    if not (p/'level.dat').is_file() or (p/'level.dat').is_symlink(): fail('Keine gültige Bedrock-Welt (level.dat fehlt)')
+    return p
+
+def is_running():
+    return subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode==0
+
+def listing():
+    active,_=current()
+    out=[]
+    if WORLDS.is_dir():
+        for p in sorted(WORLDS.iterdir(),key=lambda x:x.name.casefold()):
+            if p.is_symlink() or not p.is_dir() or not valid_name(p.name):continue
+            if not (p/'level.dat').is_file() or (p/'level.dat').is_symlink():continue
+            out.append({'name':p.name,'selected':p.name==active,'modified':int(p.stat().st_mtime)})
+    print(json.dumps({'worlds':out,'selected':active,'running':is_running()},ensure_ascii=False))
+
+def select(name):
+    safe_world(name)
+    old,data=current()
+    if name==old:
+        print(json.dumps({'ok':True,'message':'Diese Welt ist bereits ausgewählt.','restart_required':False},ensure_ascii=False));return
+    # Preserve existing server.properties content, including comments and other settings.
+    updated=re.sub(r'^level-name=.*\r?$',lambda _: 'level-name='+name,data,count=1,flags=re.M)
+    st=PROPS.stat()
+    fd,tmp=tempfile.mkstemp(prefix='.server.properties-',dir=BASE)
+    try:
+        with os.fdopen(fd,'w',encoding='utf-8',newline='') as f:
+            f.write(updated);f.flush();os.fsync(f.fileno())
+        os.chown(tmp,st.st_uid,st.st_gid);os.chmod(tmp,st.st_mode & 0o777)
+        os.replace(tmp,PROPS)
+        subprocess.run(['/usr/bin/setfacl','-m','u:www-data:r--',str(PROPS)],check=True)
+    finally:
+        if os.path.exists(tmp):os.unlink(tmp)
+    print(json.dumps({'ok':True,'selected':name,'restart_required':is_running(),
+      'message':'Welt ausgewählt. '+('Bitte den Server manuell neu starten.' if is_running() else 'Sie wird beim nächsten manuellen Start geladen.')},ensure_ascii=False))
+
+def create(name):
+    if not valid_name(name):fail('Ungültiger Weltname (1–80 Zeichen, keine Pfadzeichen)')
+    # Bedrock creates world data itself on next start. A directory is not pre-created.
+    if (WORLDS/name).exists() or (WORLDS/name).is_symlink():fail('Weltname bereits vergeben')
+    _,data=current()
+    # New world creation uses level-name; no filesystem write under worlds needed.
+    select_new(name,data)
+
+def select_new(name,data):
+    st=PROPS.stat()
+    updated=re.sub(r'^level-name=.*\r?$',lambda _: 'level-name='+name,data,count=1,flags=re.M)
+    fd,tmp=tempfile.mkstemp(prefix='.server.properties-',dir=BASE)
+    try:
+        with os.fdopen(fd,'w',encoding='utf-8',newline='') as f:f.write(updated);f.flush();os.fsync(f.fileno())
+        os.chown(tmp,st.st_uid,st.st_gid);os.chmod(tmp,st.st_mode & 0o777)
+        os.replace(tmp,PROPS)
+        subprocess.run(['/usr/bin/setfacl','-m','u:www-data:r--',str(PROPS)],check=True)
+    finally:
+        if os.path.exists(tmp):os.unlink(tmp)
+    print(json.dumps({'ok':True,'selected':name,'restart_required':is_running(),
+      'message':'Neue Welt vorbereitet. Sie wird beim nächsten manuellen Serverstart erzeugt.'},ensure_ascii=False))
+
+
+UPLOADS=pathlib.Path('/var/lib/bedrock-panel/uploads')
+BACKUPS=pathlib.Path('/home/mcserver/backups/worlds')
+MAX_FILES=30000
+MAX_BYTES=2*1024**3
+
+def offline():
+    if is_running() or subprocess.run(['/usr/bin/pgrep','-u','mcserver','-x','bedrock_server'],stdout=subprocess.DEVNULL).returncode==0:
+        fail('Bitte Minecraft zuerst über das Dashboard stoppen.')
+
+def inspect_tree(src):
+    count=0; total=0
+    for root,dirs,files in os.walk(src,followlinks=False):
+        for name in dirs+files:
+            path=pathlib.Path(root)/name
+            st=path.lstat()
+            if not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)) or st.st_nlink>1 and stat.S_ISREG(st.st_mode):
+                fail('Links/Sonderdateien sind nicht erlaubt')
+            if stat.S_ISREG(st.st_mode):
+                count+=1;total+=st.st_size
+                if count>MAX_FILES or total>MAX_BYTES:fail('Welt überschreitet Sicherheitslimit')
+    return count,total
+
+def own_tree(root):
+    import pwd,grp
+    u=pwd.getpwnam('mcserver').pw_uid;g=grp.getgrnam('mcserver').gr_gid
+    for folder,dirs,files in os.walk(root,followlinks=False):
+        os.chown(folder,u,g)
+        for name in files:os.chown(os.path.join(folder,name),u,g,follow_symlinks=False)
+
+def duplicate(source,target):
+    offline();src=safe_world(source)
+    if not valid_name(target):fail('Ungültiger Zielname')
+    dst=WORLDS/target
+    if dst.exists() or dst.is_symlink():fail('Zielwelt existiert bereits')
+    inspect_tree(src)
+    stage=WORLDS/('.panel-copy-'+uuid.uuid4().hex)
+    try:
+        shutil.copytree(src,stage,symlinks=True)
+        inspect_tree(stage)
+        own_tree(stage)
+        os.rename(stage,dst)
+    finally:
+        if stage.exists():shutil.rmtree(stage)
+    print(json.dumps({'ok':True,'message':'Welt dupliziert: '+target},ensure_ascii=False))
+
+def backup(name):
+    offline();src=safe_world(name);inspect_tree(src)
+    BACKUPS.mkdir(parents=True,exist_ok=True)
+    stamp=time.strftime('%Y%m%d-%H%M%S',time.gmtime())
+    dest=BACKUPS/(re.sub(r'[^a-zA-Z0-9_-]','_',name)+'-'+stamp+'-'+uuid.uuid4().hex[:8]+'.tar.gz')
+    try:
+        with tarfile.open(dest,'w:gz',dereference=False) as tar:
+            tar.add(src,arcname=name,recursive=True,filter=lambda ti: ti if ti.isfile() or ti.isdir() else None)
+        os.chmod(dest,0o640)
+    except Exception:
+        dest.unlink(missing_ok=True);raise
+    print(json.dumps({'ok':True,'message':'Sicherung erstellt: '+str(dest)},ensure_ascii=False))
+
+def import_world(token,name):
+    offline()
+    if not re.fullmatch(r'[a-f0-9]{32}',token):fail('Ungültiger Upload')
+    if not valid_name(name):fail('Ungültiger Weltname')
+    dst=WORLDS/name
+    if dst.exists() or dst.is_symlink():fail('Weltname bereits vergeben')
+    src=UPLOADS/(token+'.mcworld')
+    if not src.is_file() or src.is_symlink():fail('Upload fehlt')
+    stage=WORLDS/('.panel-import-'+uuid.uuid4().hex)
+    stage.mkdir(mode=0o700)
+    try:
+        with zipfile.ZipFile(src) as z:
+            entries=z.infolist()
+            if len(entries)>MAX_FILES or sum(x.file_size for x in entries)>MAX_BYTES:fail('Archiv zu groß')
+            for entry in entries:
+                n=entry.filename.replace('\\','/')
+                parts=pathlib.PurePosixPath(n).parts
+                mode=(entry.external_attr>>16)&0o170000
+                if not n or n.startswith('/') or '..' in parts or ':' in n or entry.flag_bits&1 or mode not in (0,0o040000,0o100000):fail('Unsicheres Archiv')
+                out=stage.joinpath(*parts)
+                if entry.is_dir():out.mkdir(parents=True,exist_ok=True);continue
+                out.parent.mkdir(parents=True,exist_ok=True)
+                with z.open(entry) as inp,out.open('wb') as f:shutil.copyfileobj(inp,f)
+        roots=[stage] if (stage/'level.dat').is_file() else [x for x in stage.iterdir() if x.is_dir() and (x/'level.dat').is_file()]
+        if len(roots)!=1:fail('Keine eindeutige Bedrock-Welt mit level.dat gefunden')
+        root=roots[0];inspect_tree(root)
+        own_tree(root)
+        if root!=stage:
+            os.rename(root,dst)
+        else:
+            os.rename(stage,dst)
+        print(json.dumps({'ok':True,'message':'Welt importiert: '+name},ensure_ascii=False))
+    except (zipfile.BadZipFile,OSError) as e:fail('Import fehlgeschlagen: '+str(e))
+    finally:
+        src.unlink(missing_ok=True)
+        if stage.exists():shutil.rmtree(stage)
+
+
+# v1.8.4: Export preparation is privileged and asynchronous. Archives never reside in webroot.
+EXPORTS=pathlib.Path('/var/lib/bedrock-panel/exports')
+JOBS=pathlib.Path('/run/bedrock-panel-jobs')
+def export_start(name,fmt):
+    if fmt not in ('zip','mcworld'):fail('Ungültiges Downloadformat')
+    offline()
+    src=safe_world(name)
+    inspect_tree(src)
+    # A world may be selected but not yet running. Always require the entire server offline
+    # to avoid inconsistent LevelDB snapshots and unexpected changes during export.
+    EXPORTS.mkdir(parents=True,exist_ok=True)
+    os.chown(EXPORTS,0,__import__('grp').getgrnam('www-data').gr_gid)
+    os.chmod(EXPORTS,0o750)
+    JOBS.mkdir(parents=True,exist_ok=True)
+    job=uuid.uuid4().hex
+    status=JOBS/(job+'.json')
+    status.write_text(json.dumps({'id':job,'action':'world-export','state':'queued',
+        'message':'Weltarchiv wird vorbereitet','exit_status':None},ensure_ascii=False))
+    os.chown(status,0,__import__('grp').getgrnam('www-data').gr_gid)
+    os.chmod(status,0o640)
+    cmd=['/usr/bin/systemd-run','--unit=bedrock-world-export-'+job,'--collect',
+        '--property=Type=exec','--','/usr/local/sbin/bedrock-world-export-worker',job,name,fmt]
+    r=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    if r.returncode:
+        status.unlink(missing_ok=True)
+        fail('Export konnte nicht gestartet werden: '+r.stderr[:300])
+    print(json.dumps({'ok':True,'job_id':job,'message':'Export wird im Hintergrund vorbereitet.'},ensure_ascii=False))
+
+if __name__=='__main__':
+    if len(sys.argv)==2 and sys.argv[1]=='list':listing()
+    elif len(sys.argv)==3 and sys.argv[1]=='select':select(sys.argv[2])
+    elif len(sys.argv)==3 and sys.argv[1]=='create':create(sys.argv[2])
+    elif len(sys.argv)==4 and sys.argv[1]=='duplicate':duplicate(sys.argv[2],sys.argv[3])
+    elif len(sys.argv)==3 and sys.argv[1]=='backup':backup(sys.argv[2])
+    elif len(sys.argv)==4 and sys.argv[1]=='export-start':export_start(sys.argv[2],sys.argv[3])
+    elif len(sys.argv)==4 and sys.argv[1]=='import':import_world(sys.argv[2],sys.argv[3])
+    else:fail('Ungültiger Aufruf')

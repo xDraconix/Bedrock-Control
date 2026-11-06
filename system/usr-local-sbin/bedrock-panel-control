@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+[[ $# -eq 1 ]] || { echo 'Exactly one action required' >&2; exit 2; }
+case "$1" in
+ start|stop|restart|update|backup)
+   action="$1"
+   # Atomic admission control for all panel jobs (prevents duplicate clicks/races).
+   JOB_DIR=/run/bedrock-panel-jobs
+   /usr/bin/install -d -m 0750 -o root -g www-data "$JOB_DIR"
+   exec 9>"$JOB_DIR/.panel-lock"
+   /usr/bin/flock -n 9 || { echo 'Ein anderer Steuerauftrag wird vorbereitet' >&2; exit 1; }
+   for unit in bedrock-panel-update.service bedrock-panel-control-job.service; do
+     /usr/bin/systemctl is-active --quiet "$unit" && { echo 'Ein Auftrag läuft bereits' >&2; exit 1; }
+   done
+   JOB_ID="$(/usr/bin/od -An -N16 -tx1 /dev/urandom | /usr/bin/tr -d ' \n')"
+   /usr/bin/printf '{"id":"%s","action":"%s","state":"queued","message":"Auftrag gestartet","exit_status":null}\n' "$JOB_ID" "$action" > "$JOB_DIR/$JOB_ID.json"
+   /usr/bin/chown root:www-data "$JOB_DIR/$JOB_ID.json"
+   /usr/bin/chmod 0640 "$JOB_DIR/$JOB_ID.json"
+   if [[ "$action" == start || "$action" == stop || "$action" == restart ]]; then
+     unit=bedrock-panel-control-job
+     worker=/usr/local/sbin/bedrock-panel-service-worker
+   else
+     unit=bedrock-panel-update
+     worker=/usr/local/sbin/bedrock-panel-update-worker
+   fi
+   if /usr/bin/systemd-run --unit="$unit" --collect --property=Type=exec -- "$worker" "$action" "$JOB_ID"; then
+     echo "JOB_ID=$JOB_ID"
+   else
+     /usr/bin/rm -f "$JOB_DIR/$JOB_ID.json"
+     exit 1
+   fi ;;
+ *) echo 'Unsupported action' >&2; exit 2 ;;
+esac

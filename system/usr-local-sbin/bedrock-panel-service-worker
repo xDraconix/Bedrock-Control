@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+ACTION="${1:-}"; ID="${2:-}"
+[[ "$ACTION" =~ ^(start|stop|restart)$ && "$ID" =~ ^[a-f0-9]{32}$ ]] || exit 2
+DIR=/run/bedrock-panel-jobs; FILE="$DIR/$ID.json"
+write_status() {
+  local state="$1" message="$2" rc="$3" tmp
+  tmp="$(mktemp "$DIR/.job.XXXXXXXX")"
+  # Fixed strings only; no untrusted output inserted into JSON.
+  printf '{"id":"%s","action":"%s","state":"%s","message":"%s","exit_status":%s}\n' "$ID" "$ACTION" "$state" "$message" "$rc" > "$tmp"
+  chown root:www-data "$tmp"; chmod 0640 "$tmp"; mv -f "$tmp" "$FILE"
+}
+finish() {
+  local rc=$?
+  trap - EXIT
+  if ((rc==0)); then write_status success 'Serveraktion erfolgreich abgeschlossen.' 0
+  else write_status failed 'Serveraktion fehlgeschlagen. Minecraft-Protokoll pruefen.' "$rc"; fi
+}
+trap finish EXIT
+write_status running 'Systemd-Auftrag gestartet; warte auf Abschluss.' null
+# systemctl can block for several automatic NetherNet retries; keep polling in background.
+systemctl "$ACTION" mcbedrock.service &
+pid=$!
+start_time=$SECONDS
+while kill -0 "$pid" 2>/dev/null; do
+  if ((SECONDS-start_time>600)); then
+    write_status running 'Start dauert laenger als erwartet; systemd wird weiter ueberwacht.' null
+  else
+    case "$ACTION" in
+      stop) write_status running 'Minecraft wird kontrolliert gestoppt.' null ;;
+      *) write_status running 'Minecraft startet; NetherNet-Pruefung und automatische Wiederholungen laufen.' null ;;
+    esac
+  fi
+  sleep 3
+done
+wait "$pid"
+if [[ "$ACTION" == stop ]]; then
+  ! systemctl is-active --quiet mcbedrock.service || { echo 'Minecraft laeuft weiterhin' >&2; exit 1; }
+else
+  systemctl is-active --quiet mcbedrock.service || { echo 'Minecraft-Dienst nicht aktiv' >&2; exit 1; }
+  code="$(curl -sS --max-time 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:19132/v1/join 2>/dev/null || true)"
+  [[ "$code" == 200 ]] || { echo 'NetherNet nicht bereit' >&2; exit 1; }
+fi

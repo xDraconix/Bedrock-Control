@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Shared systemd setup for existing servers and the web-based installer.
+set -Eeuo pipefail
+[[ $EUID -eq 0 ]] || { echo 'Root erforderlich.' >&2; exit 1; }
+UNIT=/etc/systemd/system/mcbedrock.service
+DROPIN=/etc/systemd/system/mcbedrock.service.d/nethernet-watchdog.conf
+[[ -f "$UNIT" ]] || { echo 'mcbedrock.service noch nicht vorhanden; überspringe Watchdog-Einbindung.'; exit 0; }
+[[ -x /usr/local/sbin/bedrock-nethernet-check ]] || { echo 'NetherNet-Watchdog fehlt.' >&2; exit 1; }
+install -d -m 0755 /etc/systemd/system/mcbedrock.service.d
+# Separate drop-in: preserve the user's original unit and unrelated overrides.
+cat > "$DROPIN" <<'EOF'
+[Unit]
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+ExecStartPost=/usr/local/sbin/bedrock-nethernet-check
+Restart=on-failure
+RestartSec=5
+EOF
+systemctl daemon-reload
+if ! systemctl show mcbedrock.service -p ExecStartPost --value | grep -Fq '/usr/local/sbin/bedrock-nethernet-check'; then
+  echo 'FEHLER: Watchdog nicht in effektiver systemd-Konfiguration gefunden.' >&2
+  exit 1
+fi
+[[ "$(systemctl show mcbedrock.service -p Restart --value)" == on-failure ]] || {
+  echo 'FEHLER: Restart=on-failure nicht aktiv.' >&2; exit 1;
+}
+echo 'NetherNet-Watchdog eingebunden (90s, max. 3 Starts/10 Min.). Kein Neustart ausgeführt.'

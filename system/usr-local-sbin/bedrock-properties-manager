@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Restricted, revision-checked Bedrock server.properties editor."""
+import base64, fcntl, hashlib, json, os, pathlib, re, sys, tempfile, time
+P=pathlib.Path('/home/mcserver/minecraft_bedrock/server.properties')
+LOCK=pathlib.Path('/run/lock/bedrock-properties-manager.lock')
+BOOL={'online-mode','allow-cheats','enable-lan-visibility','texturepack-required','force-gamemode','server-authoritative-movement','server-authoritative-block-breaking','client-side-chunk-generation','disable-player-interaction','disable-custom-skins','disable-persona','emit-server-telemetry','enable-scripts','allow-outbound-script-debugging','allow-inbound-script-debugging','disable-chat','disable-mob-events','disable-player-movement','server-authoritative-sound','server-authoritative-entity-interactions'}
+ENUM={'gamemode':['survival','creative','adventure'],'difficulty':['peaceful','easy','normal','hard'],'default-player-permission-level':['visitor','member','operator'],'player-idle-timeout':['0']}
+INTEGER={'server-port':(1,65535),'server-portv6':(1,65535),'max-players':(1,10000),'view-distance':(2,96),'tick-distance':(4,12),'player-idle-timeout':(0,100000),'max-threads':(0,256),'compression-threshold':(0,65535),'server-authoritative-movement-strict':(0,1),'chat-restriction-level':(0,3),'block-network-ids-are-hashes':(0,1)}
+# Some official keys are floats; generic keys are kept as strings.
+FLOAT={'server-authoritative-movement-threshold','player-movement-distance-threshold','player-movement-duration-threshold-in-ms','player-movement-score-threshold'}
+def fail(msg): print(json.dumps({'error':msg},ensure_ascii=False));sys.exit(1)
+def read():
+ if P.is_symlink() or not P.is_file():fail('Ungültige Konfigurationsdatei')
+ try: raw=P.read_bytes(); text=raw.decode('utf-8')
+ except (OSError,UnicodeDecodeError): fail('server.properties nicht lesbar oder nicht UTF-8')
+ if len(raw)>1024*1024:fail('Konfigurationsdatei ist ungewöhnlich groß')
+ fields={};duplicates=set()
+ for line in text.splitlines():
+  s=line.strip()
+  if not s or s.startswith('#') or '=' not in line:continue
+  k,v=line.split('=',1);k=k.strip()
+  if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_.-]{0,99}',k):continue
+  if k in fields:duplicates.add(k)
+  fields[k]=v.strip()
+ return raw,text,fields,duplicates
+def schema(k,v):
+ if k in BOOL or v.lower() in ('true','false'):return {'type':'boolean'}
+ if k in ENUM and k!='player-idle-timeout':return {'type':'select','options':ENUM[k]}
+ if k in INTEGER:return {'type':'integer','min':INTEGER[k][0],'max':INTEGER[k][1]}
+ if k in FLOAT:return {'type':'number'}
+ return {'type':'text'}
+def validate(k,v,old):
+ if not isinstance(v,str) or len(v)>512 or any(ord(c)<32 or ord(c)==127 for c in v):fail('Ungültiger Wert für '+k)
+ if k=='level-name' and (not v.strip() or any(c in v for c in ('/', chr(92), ':'))):fail('Ungültiger Weltname')
+ if k in ('server-name','level-name') and not v.strip():fail('Name darf nicht leer sein')
+ s=schema(k,old)
+ if s['type']=='boolean' and v not in ('true','false'):fail(k+': true oder false erwartet')
+ if s['type']=='select' and v not in s['options']:fail(k+': ungültige Auswahl')
+ if s['type']=='integer' and (not re.fullmatch(r'[0-9]+',v) or not s['min']<=int(v)<=s['max']):fail(k+': ungültiger Zahlenwert')
+ if s['type']=='number':
+  try: x=float(v)
+  except ValueError:fail(k+': Zahl erwartet')
+  if not -1e9<=x<=1e9:fail(k+': Zahl außerhalb des Bereichs')
+def main():
+ if len(sys.argv)<2 or sys.argv[1] not in ('read','save'):fail('Ungültige Aktion')
+ with LOCK.open('a+') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  raw,text,fields,duplicates=read()
+  if duplicates:fail('Doppelte Eigenschaften: '+', '.join(sorted(duplicates)))
+  revision=hashlib.sha256(raw).hexdigest()
+  if sys.argv[1]=='read':
+   print(json.dumps({'revision':revision,'fields':[{'key':k,'value':v,**schema(k,v)} for k,v in fields.items()]},ensure_ascii=False));return
+  if len(sys.argv)!=3:fail('Fehlende Daten')
+  try: payload=json.loads(base64.b64decode(sys.argv[2],validate=True))
+  except Exception:fail('Ungültige Daten')
+  if not isinstance(payload,dict) or payload.get('revision')!=revision:fail('Datei wurde inzwischen geändert. Bitte neu laden.')
+  changes=payload.get('changes')
+  if not isinstance(changes,dict) or len(changes)>200:fail('Ungültige Änderungen')
+  for k,v in changes.items():
+   if k not in fields:fail('Unbekannte Eigenschaft: '+str(k))
+   validate(k,v,fields[k])
+  changed={k:v for k,v in changes.items() if fields[k]!=v}
+  if not changed:print(json.dumps({'ok':True,'changed':0,'message':'Keine Änderungen'}));return
+  # Preserve original lines, comments, order, and newline convention.
+  new=[]
+  for line in text.splitlines(keepends=True):
+   core=line.rstrip('\r\n');end=line[len(core):]
+   if '=' in core and not core.lstrip().startswith('#'):
+    key=core.split('=',1)[0].strip()
+    if key in changed:
+     prefix=core.split('=',1)[0]
+     line=prefix+'='+changed[key]+end
+   new.append(line)
+  st=P.stat()
+  if not P.is_file() or P.is_symlink():fail('Ungültige Konfigurationsdatei')
+  backup=P.with_name('server.properties.backup-'+time.strftime('%Y%m%d-%H%M%S')+'-'+os.urandom(3).hex())
+  try:
+   with backup.open('xb') as f:f.write(raw);f.flush();os.fsync(f.fileno())
+   os.chown(backup,st.st_uid,st.st_gid);os.chmod(backup,st.st_mode&0o777)
+   fd,tmp=tempfile.mkstemp(prefix='.server.properties-',dir=str(P.parent))
+   try:
+    with os.fdopen(fd,'wb') as f:f.write(''.join(new).encode('utf-8'));f.flush();os.fsync(f.fileno())
+    os.chown(tmp,st.st_uid,st.st_gid);os.chmod(tmp,st.st_mode&0o777)
+    os.replace(tmp,P)
+    import subprocess
+    subprocess.run(['/usr/bin/setfacl','-m','u:www-data:r--',str(P)],check=True)
+   finally:
+    if os.path.exists(tmp):os.unlink(tmp)
+  except OSError as e:fail('Speichern fehlgeschlagen: '+str(e))
+  print(json.dumps({'ok':True,'changed':len(changed),'backup':backup.name,'restart_required':True},ensure_ascii=False))
+if __name__=='__main__':main()

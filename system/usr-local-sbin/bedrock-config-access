@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+# Only grant the web user read access to the server configuration and version.
+[[ $EUID -eq 0 ]] || { echo 'root erforderlich' >&2; exit 1; }
+SERVER=/home/mcserver/minecraft_bedrock
+PROPS="$SERVER/server.properties"
+[[ -f "$PROPS" && ! -L "$PROPS" ]] || { echo "server.properties fehlt: $PROPS" >&2; exit 1; }
+command -v setfacl >/dev/null || { echo 'acl-Paket fehlt' >&2; exit 1; }
+setfacl -m u:www-data:--x /home/mcserver
+setfacl -m u:www-data:--x "$SERVER"
+setfacl -m u:www-data:r-- "$PROPS"
+if [[ -f "$SERVER/.installed-bedrock-version" && ! -L "$SERVER/.installed-bedrock-version" ]]; then
+  setfacl -m u:www-data:r-- "$SERVER/.installed-bedrock-version"
+fi
+runuser -u www-data -- test -r "$PROPS" || { echo 'www-data kann server.properties nicht lesen' >&2; exit 1; }
+echo 'Minecraft-Konfiguration ist für www-data lesbar (ACL).'

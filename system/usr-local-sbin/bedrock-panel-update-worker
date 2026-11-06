@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+SERVER=/home/mcserver/minecraft_bedrock
+BACKUPS=/home/mcserver/backups
+SERVICE=mcbedrock.service
+ACTION="${1:-}"
+JOB_ID="${2:-}"
+[[ "$ACTION" == update || "$ACTION" == backup ]] || exit 2
+[[ "$JOB_ID" =~ ^[a-f0-9]{32}$ ]] || { echo 'Ungueltige Auftrags-ID' >&2; exit 2; }
+JOB_DIR=/run/bedrock-panel-jobs
+JOB_FILE="$JOB_DIR/$JOB_ID.json"
+# Fixed messages only: never interpolate untrusted command output into JSON.
+write_status() {
+ local state="$1" message="$2" exit_code="$3" tmp
+ tmp="$(/usr/bin/mktemp "$JOB_DIR/.status.XXXXXXXX")"
+ /usr/bin/printf '{"id":"%s","action":"%s","state":"%s","message":"%s","exit_status":%s}\n' "$JOB_ID" "$ACTION" "$state" "$message" "$exit_code" > "$tmp"
+ /usr/bin/chown root:www-data "$tmp"
+ /usr/bin/chmod 0640 "$tmp"
+ /usr/bin/mv -f "$tmp" "$JOB_FILE"
+}
+FINAL_MESSAGE='Auftrag fehlgeschlagen. Protokoll pruefen.'
+finish() {
+ local rc="$1"
+ trap - EXIT
+ if ((rc==0)); then
+   write_status success "$FINAL_MESSAGE" 0
+ else
+   write_status failed 'Auftrag fehlgeschlagen. Protokoll pruefen.' "$rc"
+ fi
+}
+trap 'finish "$?"' EXIT
+write_status running 'Auftrag wird ausgefuehrt' null
+if [[ "$ACTION" == update ]]; then
+ [[ -f /root/update-mc2.sh ]] || { echo 'Update-Skript fehlt: /root/update-mc2.sh' >&2; exit 1; }
+ OUTPUT="$(/usr/bin/mktemp)"
+ trap 'rc=$?; rm -f "${OUTPUT:-}"; finish "$rc"' EXIT
+ # tee keeps all updater output visible in journalctl.
+ /bin/bash /root/update-mc2.sh 2>&1 | /usr/bin/tee "$OUTPUT"
+ if /usr/bin/grep -qiE 'bereits installiert|kein update erforderlich' "$OUTPUT"; then
+   FINAL_MESSAGE='Minecraft ist bereits aktuell. Kein Update erforderlich.'
+ else
+   FINAL_MESSAGE='Update erfolgreich abgeschlossen.'
+ fi
+ /usr/bin/rm -f "$OUTPUT"
+ trap 'finish "$?"' EXIT
+else
+ /usr/bin/mkdir -p "$BACKUPS"
+ /usr/bin/systemctl stop "$SERVICE"
+ # On backup failure also attempt to restart; propagate a failed restart.
+ backup_rc=0
+ /usr/bin/tar -czf "$BACKUPS/minecraft-$(date +%Y%m%d-%H%M%S).tar.gz" -C /home/mcserver minecraft_bedrock || backup_rc=$?
+ /usr/bin/systemctl start "$SERVICE" || { echo 'Minecraft konnte nicht gestartet werden' >&2; exit 1; }
+ ((backup_rc==0)) || exit "$backup_rc"
+ FINAL_MESSAGE='Backup erfolgreich erstellt. Minecraft-Dienst gestartet.'
+ echo 'Backup erfolgreich erstellt'
+fi
