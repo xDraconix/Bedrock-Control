@@ -51,3 +51,14 @@ Ein vorbereitetes Installer-ZIP steht zunächst als ChatGPT-Testartefakt zur Ver
 - Erfolgs- und Manipulationstest mit lokal erzeugtem Testschlüssel durchgeführt. Noch kein Test in einem Debian-13-LXC und kein Rollback-Funktionstest.
 - **Kein automatisches Update freigeschaltet**. Der nächste Schritt ist ein strikt begrenzter Hintergrund-Installer mit konsistentem Backup und getestetem Rollback.
 - Das neue Installations-ZIP ist noch **nicht** auf GitHub veröffentlicht; der Zweig enthält bislang diesen Entwicklungsbericht, nicht den Beta-3-Quellcode.
+
+
+## Zwischenstand: v2.5.0-beta5 (Testpaket)
+
+- Root-only CLI `bedrock-panel-update-test` mit dem Befehl `simulate-failure --confirm-test`.
+- Sicherung und Verifikation werden vor dem simulierten Updatefehler ausgeführt; danach folgt automatisch ein Restore sowie die Überprüfung von PHP, Apache und HTTP 200.
+- `stage TAG ZIP MANIFEST SIGNATURE` verifiziert signierte Releases und entpackt sie nur in einen isolierten Root-Stagingbereich; **keine Installation oder Ausführung**.
+- Das Werkzeug ist nicht in der Apache-sudoers-Freigabe enthalten. Der Minecraft-Dienst wird nicht gestoppt oder gestartet.
+- Lokale isolierte Tests: signiertes ZIP für Staging akzeptiert; absichtlich ausgelöster Fehler führt zum Snapshot-Rollback.
+- **Nicht getestet**: Ablauf auf Debian 13 mit Live-Apache und die Installation eines echten signierten Release. Beides ist noch nicht freigeschaltet.
+- Das Installations-ZIP liegt als Testartefakt im Chat; der neue Beta-5-Quellcode ist bislang **nicht in diesem GitHub-Zweig** veröffentlicht.
