@@ -62,3 +62,15 @@ Ein vorbereitetes Installer-ZIP steht zunächst als ChatGPT-Testartefakt zur Ver
 - Lokale isolierte Tests: signiertes ZIP für Staging akzeptiert; absichtlich ausgelöster Fehler führt zum Snapshot-Rollback.
 - **Nicht getestet**: Ablauf auf Debian 13 mit Live-Apache und die Installation eines echten signierten Release. Beides ist noch nicht freigeschaltet.
 - Das Installations-ZIP liegt als Testartefakt im Chat; der neue Beta-5-Quellcode ist bislang **nicht in diesem GitHub-Zweig** veröffentlicht.
+
+## Beta 6: signiertes lokales Panel-Upgrade
+
+- Neues ausschließlich als `root` ausführbares Werkzeug: `bedrock-panel-apply-release install-local TAG ZIP MANIFEST SIGNATUR --confirm-update`.
+- Prüft Release mit lokal verankertem Ed25519-Schlüssel, SHA-256, Archivgrößen und ZIP-Pfaden, prüft außerdem Versions-Metadaten im Paket.
+- Legt verifizierte Daten im root-eigenen Staging ab, sichert die laufende Installation und prüft den Snapshot.
+- Übernimmt **nur** `app/public/`, `app/set-password.php` und `VERSION`; führt **nicht** `install.sh` oder andere Shell-Dateien aus dem Release aus; keine Änderungen an Minecraft-Diensten.
+- Nach dem Austausch: PHP-Lint als `www-data`, Apache-Konfigurationsprüfung, Apache-Neustart, HTTP-Funktionsprüfung und Vergleich des Minecraft-Dienststatus.
+- Bei Fehler nach Änderungsbeginn: automatischer Restore des Snapshots; bei fehlgeschlagenem Restore bleibt die Snapshot-ID zur manuellen Reparatur erhalten.
+- Bisher nur im isolierten Test überprüft: gültig signierte Fixture, manipuliertes ZIP abgelehnt, erfolgreicher Upgradepfad und HTTP-Fehler mit anschließendem Rollback. **Noch kein Praxistest im Debian-13-Testcontainer.**
+- Bewusste Grenzen: kein Download direkt aus GitHub, kein Browser-Auslöser, keine Aktualisierung der Root-Helper/Systemd-Units über diesen Pfad, keine Garantie bei abruptem Stromausfall oder SIGKILL.
+- Beta-6-Installer befindet sich zunächst als Chat-Artefakt außerhalb des GitHub-Branches; der Branch enthält weiterhin nur die Dokumentation zu Beta 6.
