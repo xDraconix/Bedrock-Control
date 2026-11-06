@@ -41,3 +41,13 @@ Ein vorbereitetes Installer-ZIP steht zunächst als ChatGPT-Testartefakt zur Ver
 2. Offline / GitHub-Rate-Limit erzeugt verständliche Fehlermeldung ohne Server-Auswirkungen.
 3. Ungültige Release-Daten, nicht vertrauenswürdige Assets und fehlende Prüfsummen werden abgelehnt.
 4. Für Phase 3 zusätzlich erfolgreicher Update-Test und erzwungener Rollback im Debian-13-Testcontainer.
+
+## Implementierter Zwischenstand: v2.5.0-beta3
+
+- Implementiert sind Ed25519-Signaturerstellung (Release-Publisher) und ein lokaler Offline-Verifier unter `/usr/local/bin/bedrock-panel-verify-release`.
+- Release-ZIP und signiertes Manifest werden anhand eines **lokal separat hinterlegten** Root-eigenen öffentlichen Schlüssels überprüft. Privater Schlüssel wird niemals vom Installer verteilt.
+- Der Verifier prüft außerdem SHA-256, Archivgröße und ZIP-Sicherheitskriterien (Traversal, Symlinks, Dateianzahl und Größenlimits).
+- Der Webbereich meldet, ob ein GitHub Release die erwarteten Signatur-Assets enthält und ob ein vertrauenswürdiger öffentlicher Schlüssel lokal eingerichtet wurde. Eine Anzeige ist **keine erfolgte Verifikation**.
+- Erfolgs- und Manipulationstest mit lokal erzeugtem Testschlüssel durchgeführt. Noch kein Test in einem Debian-13-LXC und kein Rollback-Funktionstest.
+- **Kein automatisches Update freigeschaltet**. Der nächste Schritt ist ein strikt begrenzter Hintergrund-Installer mit konsistentem Backup und getestetem Rollback.
+- Das neue Installations-ZIP ist noch **nicht** auf GitHub veröffentlicht; der Zweig enthält bislang diesen Entwicklungsbericht, nicht den Beta-3-Quellcode.
