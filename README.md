@@ -4,9 +4,13 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.5.4** – Stable-Release-Kandidat mit signiertem Panel-Selbstupdate.
+**2.5.5** – Entwicklungskandidat mit Weltseed- und Metadatenanzeige (auf Basis v2.5.4 Stable).
 
 > Wichtig: Die Sicherheitsprüfung und der Web-Updateablauf wurden auf Testcontainern erfolgreich erprobt. Ein browsergestütztes Panel-Update aktualisiert derzeit **nur** Webdateien und Panel-Versionsdatei, nicht sämtliche Root-Helper, systemd-Units oder sudoers-Regeln. Versionswechsel mit geänderten Systemkomponenten müssen mit `bash install.sh` ausgeführt werden.
+
+## Neue Funktion in 2.5.5
+
+Im **Welten-Manager** werden der signierte 64-Bit-Weltseed aus Bedrocks `level.dat` sowie verfügbare Metadaten (Spielmodus, Schwierigkeit und Levelname) ausschließlich lesend angezeigt. Negative Seeds werden unterstützt und bleiben als Dezimalzeichenfolge unverändert; ein Kopieren-Button ist vorhanden. Nicht lesbare oder beschädigte Dateien werden als „Nicht verfügbar“ angezeigt. Die Funktion benötigt die aktualisierte Root-Komponente `bedrock-world-manager` und wird daher **nicht allein durch das Panel-Webupdate** installiert. Zum Testen den Entwicklungszweig auf einem Testcontainer auschecken und `bash install.sh` ausführen.
 
 ## Funktionen
 
@@ -56,11 +60,11 @@ Das Installationspaket wird aus einem **sauberen, geprüften Git-Commit** gebaut
 bash release-tools/build-release.sh
 ```
 
-Das erzeugte Archiv `dist/Bedrock-Control-PRO-v2.5.4-Release.zip` anschließend **auf dem vertrauenswürdigen Signierrechner** signieren:
+Das erzeugte Archiv `dist/Bedrock-Control-PRO-v2.5.5-Release.zip` anschließend **auf dem vertrauenswürdigen Signierrechner** signieren:
 
 ```bash
-bash release-tools/sign-release.sh v2.5.4 \
-  dist/Bedrock-Control-PRO-v2.5.4-Release.zip \
+bash release-tools/sign-release.sh v2.5.5 \
+  dist/Bedrock-Control-PRO-v2.5.5-Release.zip \
   /SICHERER-ORT/release-private.pem
 ```
 

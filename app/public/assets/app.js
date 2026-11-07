@@ -279,6 +279,60 @@ async function loadWorlds(){
    const name=document.createElement('b');name.textContent=w.name;
    const sub=document.createElement('div');sub.className='muted tiny';sub.textContent=w.selected?'In server.properties ausgewählt':'Vorhandene Welt';
    info.append(name,sub);
+   const meta=document.createElement('div');meta.className='muted tiny';
+   const details=[];
+   if(w.game_mode)details.push('Spielmodus: '+w.game_mode);
+   if(w.difficulty)details.push('Schwierigkeit: '+w.difficulty);
+   if(w.level_name&&w.level_name!==w.name)details.push('Weltname: '+w.level_name);
+   meta.textContent=details.join(' · ');
+   if(details.length)info.append(meta);
+   const seedBox=document.createElement('div');seedBox.className='world-seed-row';
+   const seedLabel=document.createElement('span');seedLabel.className='muted tiny';seedLabel.textContent='Weltseed:';
+   const seedValue=document.createElement('code');seedValue.textContent=(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed))?w.seed:'Nicht verfügbar';
+   seedBox.append(seedLabel,seedValue);
+   if(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed)){
+    const seedCopy=document.createElement('button');seedCopy.className='secondary';seedCopy.textContent='Kopieren';
+    seedCopy.title='Weltseed in Zwischenablage kopieren';
+    seedCopy.addEventListener('click',()=>{
+     // The dashboard commonly runs on http://SERVER-IP:8088, where the
+     // asynchronous Clipboard API is unavailable outside secure contexts.
+     // The legacy copy command can still work directly in a user click.
+     function copyLegacy(value){
+      const input=document.createElement('textarea');
+      input.value=value;
+      input.readOnly=true;
+      input.setAttribute('aria-hidden','true');
+      input.style.cssText='position:fixed;left:-9999px;top:0;opacity:0;';
+      const selection=window.getSelection();
+      const oldRanges=[];
+      if(selection)for(let i=0;i<selection.rangeCount;i++)oldRanges.push(selection.getRangeAt(i));
+      const previousFocus=document.activeElement;
+      document.body.append(input);
+      let copied=false;
+      try{
+       input.focus({preventScroll:true});
+       input.select();
+       input.setSelectionRange(0,input.value.length);
+       copied=typeof document.execCommand==='function'&&document.execCommand('copy');
+      }finally{
+       input.remove();
+       if(selection){selection.removeAllRanges();for(const range of oldRanges)selection.addRange(range)}
+       if(previousFocus&&typeof previousFocus.focus==='function')previousFocus.focus({preventScroll:true});
+      }
+      return copied;
+     }
+     if(copyLegacy(w.seed)){showNotice('Weltseed in Zwischenablage kopiert.');return}
+     if(window.isSecureContext&&navigator.clipboard?.writeText){
+      navigator.clipboard.writeText(w.seed)
+       .then(()=>showNotice('Weltseed in Zwischenablage kopiert.'))
+       .catch(()=>showNotice('Kopieren nicht möglich. Bitte den sichtbaren Seed markieren und Strg+C drücken.',true));
+      return;
+     }
+     showNotice('Automatisches Kopieren wird von diesem Browser nicht unterstützt. Bitte den sichtbaren Seed markieren und Strg+C drücken.',true);
+    });
+    seedBox.append(seedCopy);
+   }
+   info.append(seedBox);
    const btn=document.createElement('button');btn.className=w.selected?'secondary':'positive';btn.textContent=w.selected?'Ausgewählt':'Welt auswählen';btn.disabled=!!w.selected;
    btn.addEventListener('click',()=>worldAction('select',w.name));
    const copy=document.createElement('button');copy.className='secondary';copy.textContent='Duplizieren';copy.addEventListener('click',()=>{const n=prompt('Name für Kopie von '+w.name+':',w.name+' Kopie');if(n)worldDuplicate(w.name,n.trim())});
