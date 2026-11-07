@@ -60,11 +60,11 @@ Das Installationspaket wird aus einem **sauberen, geprüften Git-Commit** gebaut
 bash release-tools/build-release.sh
 ```
 
-Das erzeugte Archiv `dist/Bedrock-Control-PRO-v2.5.4-Release.zip` anschließend **auf dem vertrauenswürdigen Signierrechner** signieren:
+Das erzeugte Archiv `dist/Bedrock-Control-PRO-v2.5.5-Release.zip` anschließend **auf dem vertrauenswürdigen Signierrechner** signieren:
 
 ```bash
-bash release-tools/sign-release.sh v2.5.4 \
-  dist/Bedrock-Control-PRO-v2.5.4-Release.zip \
+bash release-tools/sign-release.sh v2.5.5 \
+  dist/Bedrock-Control-PRO-v2.5.5-Release.zip \
   /SICHERER-ORT/release-private.pem
 ```
 
