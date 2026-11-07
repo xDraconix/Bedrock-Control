@@ -241,5 +241,5 @@ if [[ ! -s /opt/bedrock-control-pro/config/password.hash ]]; then
   echo 'Administrator-Passwort jetzt einrichten:'
   php /opt/bedrock-control-pro/set-password.php
 fi
-echo 'Installation abgeschlossen (v2.5.3): http://SERVER-IP:8088/'
+echo 'Installation abgeschlossen (v2.5.4): http://SERVER-IP:8088/'
 echo 'Bestehende Minecraft-Server wurden nicht neu gestartet oder überschrieben. Bei Neuinstallation: Webpanel öffnen und Setup-Assistent verwenden.'
