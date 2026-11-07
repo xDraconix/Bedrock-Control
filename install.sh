@@ -162,6 +162,15 @@ install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-recove
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-update-test" /usr/local/bin/bedrock-panel-update-test
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-apply-release" /usr/local/bin/bedrock-panel-apply-release
 # Dedicated root-only directory. The web server has no write permission here.
+# Updatekanal ist eine root-verwaltete Konfiguration und bleibt bei Upgrades erhalten.
+CHANNEL_CONFIG=/etc/bedrock-control-pro/update-channel
+if [[ ! -e "$CHANNEL_CONFIG" && ! -L "$CHANNEL_CONFIG" ]]; then
+  install -m 0644 -o root -g root /dev/null "$CHANNEL_CONFIG"
+  printf 'stable\n' > "$CHANNEL_CONFIG"
+elif [[ -L "$CHANNEL_CONFIG" || ! -f "$CHANNEL_CONFIG" || "$(stat -c %u "$CHANNEL_CONFIG")" != 0 ]]; then
+  echo 'FEHLER: Updatekanal-Datei ist nicht sicher eingerichtet.' >&2
+  exit 1
+fi
 install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-worker" /usr/local/sbin/bedrock-panel-self-update-worker
 install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-control" /usr/local/sbin/bedrock-panel-self-update-control
 install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-panel-self-update.service" /etc/systemd/system/bedrock-panel-self-update.service
