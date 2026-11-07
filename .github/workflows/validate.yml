@@ -21,6 +21,7 @@ jobs:
           bash -n install.sh
           bash -n release-tools/build-release.sh
           bash -n release-tools/sign-release.sh
+          bash -n release-tools/prepare-signed-release.sh
           php -l app/public/index.php
           php -l app/set-password.php
       - name: Check browser JavaScript syntax
