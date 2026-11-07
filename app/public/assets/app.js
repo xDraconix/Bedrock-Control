@@ -150,14 +150,36 @@ async function loadPanelSecurity(){
   txt('panelAutoInstallState','Prüfe Verfügbarkeit …');
  }catch(e){txt('panelTrustKeyState','Prüfung fehlgeschlagen');txt('panelTrustKeyFingerprint','Schlüsselstatus konnte nicht geladen werden.');}
 }
+let panelSelectedChannel='stable';
+async function loadPanelChannel(){
+ try{
+  const d=await api('panel-update-channel');
+  panelSelectedChannel=d.channel==='test'?'test':'stable';
+  $('panelUpdateChannel').value=panelSelectedChannel;
+  txt('panelChannelState',panelSelectedChannel==='test'?'Testkanal aktiv – veröffentlichte Pre-Releases':'Stabiler Kanal aktiv');
+ }catch(e){txt('panelChannelState','Updatekanal nicht lesbar: '+e.message);$('panelStartUpdate').disabled=true;}
+}
+$('panelSaveUpdateChannel').addEventListener('click',async()=>{
+ const channel=$('panelUpdateChannel').value;
+ if(!['stable','test'].includes(channel))return;
+ if(channel==='test'&&!confirm('Testkanal aktivieren? Pre-Releases sind möglicherweise instabil und sollten nur auf dem Testserver installiert werden.'))return;
+ $('panelSaveUpdateChannel').disabled=true;
+ try{
+  await api('panel-update-channel',{method:'POST',headers:{'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:JSON.stringify({channel})});
+  panelSelectedChannel=channel;
+  await loadPanelChannel();await loadPanelRelease();
+ }catch(e){showNotice('Updatekanal: '+e.message,true);await loadPanelChannel();}
+ finally{$('panelSaveUpdateChannel').disabled=false;}
+});
 async function loadPanelRelease(){
  loadPanelSecurity();
  const button=$('panelCheckReleases');button.disabled=true;
+ await loadPanelChannel();
  txt('panelUpdateState','Prüfe offizielle GitHub-Releases …');
  $('panelReleaseLink').hidden=true;
  try{
   const d=await api('panel-release');
-  $('panelStartUpdate').disabled=!d.installation_enabled;
+  $('panelStartUpdate').disabled=!d.installation_enabled || d.channel!==panelSelectedChannel;
   txt('panelInstalledVersion',d.installed);
   txt('panelLatestVersion',d.latest);
   renderReleaseMarkdown(d.notes);
@@ -168,7 +190,7 @@ async function loadPanelRelease(){
    : 'Dieses Release ist noch nicht digital signiert. Automatische Installation bleibt gesperrt.');
   txt('panelUpdateState',d.update_available
    ? (d.installation_enabled?'Signiertes neues Panel-Release ist verfügbar. Update per Klick möglich.':'Neue Version verfügbar, aber Signaturdateien oder vertrauenswürdiger Schlüssel fehlen.')
-   : 'Keine neuere stabile Panel-Version verfügbar.');
+   : 'Keine neuere Panel-Version im ausgewählten Kanal verfügbar.');
   const a=$('panelReleaseLink');
   if(/^https:\/\/github\.com\/xDraconix\/Bedrock-Control\/releases\/tag\/v\d+\.\d+\.\d+$/.test(d.release_url||'')){
    a.href=d.release_url;a.hidden=false;
@@ -190,7 +212,7 @@ async function pollPanelUpdate(){
  }catch(e){txt('panelUpdateState','Update-Protokoll nicht erreichbar: '+e.message);}
 }
 $('panelStartUpdate').addEventListener('click',async()=>{
- if(!confirm('Signiertes GitHub-Release installieren? Apache wird während des Updates neu gestartet; Minecraft soll weiterlaufen.'))return;
+ if(!confirm('Signiertes GitHub-Release aus dem Kanal '+(panelSelectedChannel==='test'?'TESTVERSIONEN':'STABIL')+' installieren? Apache wird neu gestartet; Minecraft soll weiterlaufen.'))return;
  $('panelStartUpdate').disabled=true;
  try{await api('panel-update-start',{method:'POST',headers:{'X-CSRF-Token':csrf}});
    txt('panelUpdateState','Panel-Updateauftrag gestartet. Protokoll wird geladen …');
