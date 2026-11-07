@@ -84,3 +84,13 @@ Ein vorbereitetes Installer-ZIP steht zunächst als ChatGPT-Testartefakt zur Ver
 - Offline-Tests: Testkanal wählt `v2.5.3`, stabiler Kanal `v2.4.3`; PHP/JS/Python/Bash und sudoers-Syntax validiert; **noch kein Debian-13-Praxistest**.
 - Das Installations-ZIP ist als Chat-Artefakt bereitgestellt; der Beta-8-Quellcode ist noch **nicht** in diesen GitHub-Zweig übernommen.
 - Hinweis: Das bereits signierte v2.5.3-Release enthält ältere Webdateien. Nach dessen Installation kann die Beta-8-Kanalauswahl aus der Oberfläche verschwinden, während die Root-eigene Kanaleinstellung bestehen bleibt.
+
+
+## Release-Vertrauensschlüssel auf neuen Installationen
+
+- Der offizielle Ed25519-**Public Key** `system/release/trusted-release-key.pem` ist nun im Entwicklungszweig versioniert.
+- `install.sh` installiert den Schlüssel auf frischen Debian-Systemen automatisch nach `/etc/bedrock-control-pro/trusted-release-key.pem` (`root:root`, Modus `0644`).
+- Existiert bereits ein Schlüssel, wird seine durch OpenSSL normalisierte DER-Darstellung mit dem eingebauten Schlüssel verglichen; bei Abweichungen wird **abgebrochen, niemals überschrieben**.
+- Vorhandene Symlinks, fremde Eigentümer und schreibbare Schlüssel-/Verzeichnisrechte werden abgelehnt.
+- Der private Signaturschlüssel gehört **nicht** in Repository, Installer oder Panel.
+- **Noch ausstehend:** vollständiger Fresh-Install-Test auf Debian 13 und ein Negativtest mit abweichendem Schlüssel. Die bloße Übernahme ins Repository verifiziert noch keinen Installationsablauf.
