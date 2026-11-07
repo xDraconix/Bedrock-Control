@@ -109,8 +109,54 @@ if [[ -f /opt/bedrock-control-pro/config/password.hash ]]; then
   chown root:www-data /opt/bedrock-control-pro/config/password.hash
   chmod 0640 /opt/bedrock-control-pro/config/password.hash
 fi
+# Public verification key is shipped with the *trusted installer*.
+# Never overwrite an existing key or trust a key obtained from an unverified update.
+TRUST_DIR=/etc/bedrock-control-pro
+TRUST_KEY="$TRUST_DIR/trusted-release-key.pem"
+BUNDLED_KEY="$ROOT/system/release/trusted-release-key.pem"
+[[ -f "$BUNDLED_KEY" && ! -L "$BUNDLED_KEY" ]] || {
+  echo "FEHLER: Öffentlicher Release-Schlüssel im Installer fehlt oder ist ein Symlink." >&2
+  exit 1
+}
+if ! /usr/bin/openssl pkey -pubin -in "$BUNDLED_KEY" -noout >/dev/null 2>&1; then
+  echo "FEHLER: Mitgelieferter öffentlicher Release-Schlüssel ist ungültig." >&2
+  exit 1
+fi
+[[ ! -L "$TRUST_DIR" ]] || { echo "FEHLER: $TRUST_DIR ist ein Symlink." >&2; exit 1; }
+if [[ -e "$TRUST_DIR" ]]; then
+  [[ -d "$TRUST_DIR" ]] || { echo "FEHLER: $TRUST_DIR ist kein Verzeichnis." >&2; exit 1; }
+  [[ "$(stat -c %u "$TRUST_DIR")" == 0 ]] || { echo "FEHLER: $TRUST_DIR gehört nicht root." >&2; exit 1; }
+  dir_mode="$(stat -c %a "$TRUST_DIR")"
+  if (( (8#$dir_mode & 8#022) != 0 )); then
+    echo "FEHLER: $TRUST_DIR ist durch Gruppe/Andere beschreibbar." >&2
+    exit 1
+  fi
+else
+  install -d -m 0755 -o root -g root "$TRUST_DIR"
+fi
+if [[ -e "$TRUST_KEY" || -L "$TRUST_KEY" ]]; then
+  [[ -f "$TRUST_KEY" && ! -L "$TRUST_KEY" ]] || { echo "FEHLER: vorhandener Schlüssel ist kein reguläres File." >&2; exit 1; }
+  [[ "$(stat -c %u "$TRUST_KEY")" == 0 ]] || { echo "FEHLER: vorhandener Schlüssel gehört nicht root." >&2; exit 1; }
+  key_mode="$(stat -c %a "$TRUST_KEY")"
+  if (( (8#$key_mode & 8#022) != 0 )); then
+    echo "FEHLER: vorhandener Schlüssel ist durch Gruppe/Andere beschreibbar." >&2
+    exit 1
+  fi
+  installed_fp="$(/usr/bin/openssl pkey -pubin -in "$TRUST_KEY" -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+  bundled_fp="$(/usr/bin/openssl pkey -pubin -in "$BUNDLED_KEY" -outform DER 2>/dev/null | sha256sum | awk '{print $1}')"
+  if [[ "$installed_fp" != "$bundled_fp" ]]; then
+    echo "FEHLER: vorhandener Release-Prüfschlüssel weicht vom Installer-Schlüssel ab." >&2
+    echo "Der Schlüssel wird NICHT überschrieben; bitte Herausgeber und Fingerabdruck prüfen." >&2
+    exit 1
+  fi
+  echo 'Release-Prüfschlüssel vorhanden und mit mitgeliefertem Schlüssel identisch; unverändert belassen.'
+else
+  install -m 0644 -o root -g root "$BUNDLED_KEY" "$TRUST_KEY"
+  echo 'Öffentlichen Ed25519-Release-Prüfschlüssel eingerichtet.'
+fi
+/usr/bin/openssl pkey -pubin -in "$TRUST_KEY" -noout >/dev/null
 install -d -m 0755 /usr/local/share/bedrock-control-pro
-# Verifier is a root-owned tool; no automatic trusted key installation.
+# Verifier is a root-owned tool; trusted public key was checked above.
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-verify-release" /usr/local/bin/bedrock-panel-verify-release
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-recovery" /usr/local/bin/bedrock-panel-recovery
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-update-test" /usr/local/bin/bedrock-panel-update-test
