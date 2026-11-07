@@ -72,3 +72,9 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
 .panel-security-item>span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#9fbba1}
 .panel-security-item>strong{font-size:15px;color:#e9f2df;overflow-wrap:anywhere}
 .panel-security-item>small{font-size:11px;overflow-wrap:anywhere;line-height:1.5}
+
+
+/* Weltmetadaten: kopierbarer 64-bit-Bedrock-Seed */
+.world-seed-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.world-seed-row code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;user-select:all}
+.world-seed-row button{padding:4px 10px;font-size:.8rem}
