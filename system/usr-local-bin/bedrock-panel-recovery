@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Root-only, offline backup/verify/manual rollback for Bedrock Control PRO.
+
+Never touches the Minecraft installation, worlds or mcbedrock.service process.
+Does not execute release content or automatically install anything.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import stat
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+BASE = Path('/var/backups/bedrock-control-pro')
+PANEL = Path('/opt/bedrock-control-pro')
+SOURCES = [
+    Path('/opt/bedrock-control-pro'),
+    Path('/usr/local/share/bedrock-control-pro'),
+    Path('/usr/local/bin/bedrock-panel-verify-release'),
+    Path('/usr/local/bin/bedrock-panel-recovery'),
+    Path('/usr/local/bin/bedrock-panel-update-test'),
+    Path('/usr/local/bin/bedrock-panel-apply-release'),
+    Path('/etc/apache2/sites-available/bedrock-control-pro.conf'),
+    Path('/etc/sudoers.d/bedrock-control-pro'),
+    Path('/etc/systemd/system/mcbedrock.service.d/bedrock-control-pro.conf'),
+    Path('/etc/systemd/system/mcbedrock.service.d/nethernet-watchdog.conf'),
+    Path('/etc/tmpfiles.d/bedrock-control-pro.conf'),
+    Path('/etc/tmpfiles.d/bedrock-panel-jobs.conf'),
+    Path('/etc/tmpfiles.d/bedrock-world-exports.conf'),
+]
+# All project-specific administrative helpers. No arbitrary paths permitted.
+SOURCES += sorted(Path('/usr/local/sbin').glob('bedrock-*'))
+SOURCES += sorted(Path('/etc/php').glob('*/apache2/conf.d/99-bedrock-addon-upload.ini'))
+
+
+def die(message):
+    raise SystemExit('FEHLER: ' + message)
+
+
+def validate_path(path):
+    if path.is_symlink():
+        die('Symlink nicht erlaubt: ' + str(path))
+    if path.is_dir():
+        for entry in path.rglob('*'):
+            if entry.is_symlink():
+                die('Symlink im Sicherungsbereich nicht erlaubt: ' + str(entry))
+            if not entry.is_file() and not entry.is_dir():
+                die('Spezialdatei im Sicherungsbereich nicht erlaubt: ' + str(entry))
+    elif not path.is_file():
+        die('Unerwarteter Dateityp: ' + str(path))
+
+
+def sha256(path):
+    dig = hashlib.sha256()
+    with path.open('rb') as f:
+        for block in iter(lambda: f.read(1024 * 1024), b''):
+            dig.update(block)
+    return dig.hexdigest()
+
+
+def paths_in(root):
+    return sorted((p for p in root.rglob('*') if p.is_file()), key=str)
+
+
+def original_ownership(paths):
+    result={}
+    for source in paths:
+        for p in [source]+(list(source.rglob('*')) if source.is_dir() else []):
+            st=p.stat()
+            result[str(p)]={'uid':st.st_uid,'gid':st.st_gid,'mode':stat.S_IMODE(st.st_mode)}
+    return result
+
+
+def source_list():
+    return list(dict.fromkeys(p for p in SOURCES if p.exists()))
+
+
+def file_manifest(root):
+    result={}
+    for p in paths_in(root):
+        st = p.stat()
+        result[str(p.relative_to(root))] = {'sha256': sha256(p), 'mode': stat.S_IMODE(st.st_mode), 'size': st.st_size}
+    return result
+
+
+def basecheck():
+    if BASE.is_symlink():
+        die('Backup-Stammverzeichnis ist ein Symlink')
+    BASE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if BASE.stat().st_uid != 0 or (stat.S_IMODE(BASE.stat().st_mode) & 0o077):
+        die('Backup-Stammverzeichnis muss root gehören und Modus 0700 haben')
+
+
+def backup():
+    basecheck()
+    items=source_list()
+    if PANEL not in items:
+        die('Panel ist nicht installiert')
+    for src in items:
+        validate_path(src)
+    temp=Path(tempfile.mkdtemp(prefix='.snapshot-', dir=BASE))
+    try:
+        os.chmod(temp, 0o700)
+        data=temp/'files'
+        for src in items:
+            dest=data/src.relative_to('/')
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_dir():
+                shutil.copytree(src, dest, copy_function=shutil.copy2)
+            else:
+                shutil.copy2(src, dest)
+        meta={'schema':1,'created_at':datetime.now(timezone.utc).isoformat(),
+              'sources':[str(p) for p in items], 'files':file_manifest(data),
+              'ownership':original_ownership(items)}
+        (temp/'manifest.json').write_text(json.dumps(meta,sort_keys=True,indent=2)+'\n')
+        os.chmod(temp/'manifest.json',0o600)
+        name='snapshot-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+os.urandom(4).hex()
+        dest=BASE/name
+        os.rename(temp,dest)
+        print('Sicherung erstellt: '+str(dest))
+        print('Dateien: '+str(len(meta['files'])))
+    finally:
+        if temp.exists(): shutil.rmtree(temp)
+
+
+def load(snapshot):
+    basecheck()
+    if not re.fullmatch(r'snapshot-\d{8}T\d{6}Z-[0-9a-f]{8}', snapshot):
+        die('Ungültige Snapshot-ID')
+    path=BASE/snapshot
+    if not path.is_dir() or path.is_symlink() or path.stat().st_uid!=0:
+        die('Snapshot fehlt oder ist unsicher')
+    meta_path=path/'manifest.json'
+    if not meta_path.is_file() or meta_path.is_symlink():die('Manifest fehlt')
+    meta=json.loads(meta_path.read_text())
+    if meta.get('schema')!=1 or not isinstance(meta.get('files'),dict) or not isinstance(meta.get('ownership'),dict):die('Ungültiges Manifest')
+    data=path/'files'
+    validate_path(data)
+    if file_manifest(data)!=meta['files']:
+        die('Backup-Integritätsprüfung fehlgeschlagen')
+    allowed={str(p) for p in SOURCES}
+    # Dynamic helper and PHP entries must be limited to expected fixed patterns.
+    for s in meta.get('sources',[]):
+        if s not in allowed and not re.fullmatch(r'/usr/local/sbin/bedrock-[a-z0-9-]+',s) and not re.fullmatch(r'/etc/php/\d+\.\d+/apache2/conf\.d/99-bedrock-addon-upload\.ini',s):
+            die('Ungültiger Quellpfad im Manifest: '+str(s))
+        if not str(s).startswith('/') or not (data/str(s).lstrip('/')).exists():die('Backup-Quelle fehlt: '+str(s))
+    included=set()
+    for source in meta['sources']:
+        src=Path(source)
+        snap=data/source.lstrip('/')
+        included.add(str(src))
+        if snap.is_dir():included.update(str(src / child.relative_to(snap)) for child in snap.rglob('*'))
+    if set(meta['ownership'])!=included:
+        die('Unvollständige oder unerwartete Dateipfade im Backup-Metadatenbestand')
+    print('Backup geprüft: '+str(path))
+    print('Dateien: '+str(len(meta['files'])))
+    return data,meta
+
+
+def restore(snapshot, confirmation):
+    if confirmation!='--confirm-restore':
+        die('Wiederherstellung nur mit --confirm-restore. Vorher selbst ein aktuelles Backup anlegen.')
+    data,meta=load(snapshot)
+    # Explicit root invocation only, never callable from www-data / browser.
+    for pathstr in meta['sources']:
+        source=data/pathstr.lstrip('/')
+        target=Path(pathstr)
+        if target.is_symlink():die('Ziel ist Symlink: '+str(target))
+        if target.exists() and (source.is_dir()!=target.is_dir()):die('Zieltyp abweichend: '+str(target))
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if source.is_dir():
+            if target.exists():shutil.rmtree(target)
+            shutil.copytree(source,target,copy_function=shutil.copy2)
+        else:
+            shutil.copy2(source,target)
+    # Restore original uid/gid and directory modes; copy2 alone does NOT preserve ownership.
+    for pathstr, info in sorted(meta['ownership'].items(), key=lambda pair:len(Path(pair[0]).parts),reverse=True):
+        obj=Path(pathstr)
+        if not obj.exists() or obj.is_symlink() or not isinstance(info,dict):die('Ungültiger Restore-Eintrag')
+        if not (isinstance(info.get('uid'),int) and isinstance(info.get('gid'),int) and isinstance(info.get('mode'),int)):
+            die('Ungültiger Dateieigentümer im Manifest')
+        os.chown(obj,info['uid'],info['gid'])
+        os.chmod(obj,info['mode'])
+    print('Wiederhergestellt. Bitte manuell prüfen: php -l /opt/bedrock-control-pro/public/index.php')
+    print('Danach: apache2ctl configtest && systemctl daemon-reload && systemctl restart apache2')
+    print('Minecraft wurde NICHT gestartet, gestoppt oder neu gestartet.')
+
+
+def main():
+    if os.geteuid()!=0:die('Nur als root ausführbar')
+    if len(sys.argv)==2 and sys.argv[1]=='backup':backup()
+    elif len(sys.argv)==3 and sys.argv[1]=='verify':load(sys.argv[2])
+    elif len(sys.argv)==4 and sys.argv[1]=='restore':restore(sys.argv[2],sys.argv[3])
+    else:die('Verwendung: bedrock-panel-recovery backup | verify SNAPSHOT-ID | restore SNAPSHOT-ID --confirm-restore')
+
+if __name__=='__main__':main()

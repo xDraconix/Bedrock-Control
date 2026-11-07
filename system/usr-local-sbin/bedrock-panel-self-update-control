@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[[ "$EUID" -eq 0 && "$#" -eq 1 && "$1" == start ]] || { echo 'Nur start erlaubt.' >&2; exit 2; }
+UNIT=bedrock-panel-self-update.service
+if /usr/bin/systemctl is-active --quiet "$UNIT"; then echo 'Panel-Update läuft bereits.' >&2; exit 1; fi
+/usr/bin/systemctl reset-failed "$UNIT" >/dev/null 2>&1 || true
+/usr/bin/systemctl start --no-block "$UNIT"
+echo 'Panel-Updateauftrag gestartet.'

@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""Root-only, signed *panel web files* upgrade for testing, never Minecraft.
+
+Usage:
+  bedrock-panel-apply-release install-local vX.Y.Z ZIP MANIFEST SIGNATURE --confirm-update
+
+No web/sudoers access; no network, shell execution, or release install.sh execution.
+This phase intentionally upgrades only public/, set-password.php and VERSION.
+"""
+import fcntl
+import os
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+
+PANEL = Path('/opt/bedrock-control-pro')
+BACKUP = Path('/usr/local/bin/bedrock-panel-recovery')
+VERIFY = Path('/usr/local/bin/bedrock-panel-verify-release')
+LOCK = Path('/run/lock/bedrock-panel-update-test.lock')
+ROOT = Path('/opt')
+ARCHIVE_BASE = Path('/var/lib/bedrock-panel-update-staging')
+
+class UpgradeError(Exception):
+    pass
+
+def require(condition, msg):
+    if not condition: raise UpgradeError(msg)
+
+def cmd(*argv, timeout=180, check=True):
+    result = subprocess.run([str(x) for x in argv], capture_output=True,
+                            text=True, timeout=timeout, check=False)
+    if result.stdout.strip(): print(result.stdout.strip(), flush=True)
+    if result.stderr.strip(): print(result.stderr.strip(), file=sys.stderr, flush=True)
+    if check and result.returncode: raise UpgradeError('Befehl fehlgeschlagen: '+str(argv[0]))
+    return result
+
+def versions(line):
+    m=re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:-beta(\d+))?', line.strip())
+    require(m is not None,'Ungültige lokale Version: '+repr(line))
+    a,b,c,beta=m.groups()
+    return (int(a),int(b),int(c),0 if beta else 1,int(beta or 0))
+
+def secure_regular(p):
+    p = Path(p)
+    require(p.is_file() and not p.is_symlink(), 'Datei fehlt oder ist Symlink: '+str(p))
+
+def install(tag, package, manifest, signature):
+    package, manifest, signature = (Path(p) for p in (package, manifest, signature))
+    require(re.fullmatch(r'v\d+\.\d+\.\d+',tag) is not None,'Nur stabile Release-Tags vX.Y.Z erlaubt.')
+    require(PANEL.is_dir() and not PANEL.is_symlink(), 'Panel-Verzeichnis ungültig.')
+    require(PANEL.parent == ROOT, 'Unerwarteter Installationspfad.')
+    for path in (BACKUP,VERIFY,PANEL/'VERSION',PANEL/'public/index.php'):
+        secure_regular(path)
+    old_version=(PANEL/'VERSION').read_text().strip()
+    require(versions(tag[1:]) > versions(old_version), 'Zielversion muss neuer als die installierte sein.')
+    require(ARCHIVE_BASE.is_dir() and not ARCHIVE_BASE.is_symlink(), 'Staging-Verzeichnis fehlt.')
+    st=ARCHIVE_BASE.stat()
+    require(st.st_uid==0 and stat.S_IMODE(st.st_mode)==0o700,
+            'Staging-Verzeichnis muss root:root mit 0700 sein.')
+    # Copy into root-only staging before verifying to prevent source swaps after verification.
+    workspace=Path(tempfile.mkdtemp(prefix='.update-',dir=ARCHIVE_BASE))
+    os.chmod(workspace,0o700)
+    snapshot=None
+    modified=False
+    staged=None
+    old_public=None
+    before=cmd('/usr/bin/systemctl','is-active','mcbedrock.service',check=False).stdout.strip()
+    try:
+        paths=[]
+        for p in (package,manifest,signature):
+            secure_regular(p)
+            target=workspace/p.name
+            with p.open('rb') as src, target.open('xb') as dest:
+                shutil.copyfileobj(src,dest,1024*1024)
+            os.chmod(target,0o600)
+            paths.append(target)
+        archive, mf, sig=paths
+        print('1/6 Verifiziere Signatur, Hash und Archivstruktur ...',flush=True)
+        cmd(VERIFY,tag,archive,mf,sig,timeout=180)
+        root_name='bedrock-control-pro-'+tag[1:]+'-installer/'
+        source=workspace/'unpacked'
+        source.mkdir(mode=0o700)
+        with zipfile.ZipFile(archive) as z:
+            for info in z.infolist():
+                require(info.filename.startswith(root_name), 'Unerwarteter Archivpfad: '+info.filename)
+                # Reject special file types; the verifier already checked ZIP metadata.
+                kind=stat.S_IFMT(info.external_attr>>16)
+                require(kind in (0,stat.S_IFDIR,stat.S_IFREG),'Spezialdatei im ZIP')
+            z.extractall(source)
+        installer=source/root_name
+        new_public=installer/'app/public'
+        new_set_password=installer/'app/set-password.php'
+        new_version=installer/'VERSION'
+        for path in (new_public/'index.php',new_public/'assets/app.js',
+                     new_public/'assets/app.css',new_set_password,new_version):
+            secure_regular(path)
+        require(new_version.read_text().strip()==tag[1:], 'VERSION im signierten Paket stimmt nicht mit Release-Tag überein.')
+        require(not new_public.is_symlink(), 'Public-Verzeichnis ist ein Symlink.')
+        # The signed package is trusted to provide PHP/JS/CSS, but never execute the included shell scripts.
+        for item in new_public.rglob('*'):
+            require(not item.is_symlink() and (item.is_file() or item.is_dir()), 'Ungültiger Dateityp in public/.')
+        print('2/6 Prüfe neues PHP und Apache-Konfiguration ...',flush=True)
+        cmd('/usr/bin/php','-l',new_public/'index.php',timeout=30)
+        cmd('/usr/bin/php','-l',new_set_password,timeout=30)
+        cmd('/usr/sbin/apache2ctl','configtest',timeout=30)
+        print('3/6 Erstelle und prüfe Sicherung ...',flush=True)
+        res=cmd(BACKUP,'backup',timeout=180)
+        m=re.search(r'/var/backups/bedrock-control-pro/(snapshot-\d{8}T\d{6}Z-[a-f0-9]{8})',res.stdout)
+        require(m is not None,'Snapshot-ID nicht ermittelbar.')
+        snapshot=m.group(1)
+        cmd(BACKUP,'verify',snapshot,timeout=180)
+        print('4/6 Installiere ausschließlich Webpanel-Dateien ...',flush=True)
+        staged=ROOT/('.bedrock-panel-next-'+str(os.getpid()))
+        require(not staged.exists() and not staged.is_symlink(), 'Staging-Ziel existiert bereits.')
+        shutil.copytree(new_public,staged,symlinks=False)
+        # Resolve www-data group without a hard-coded GID.
+        import grp
+        gid=grp.getgrnam('www-data').gr_gid
+        for obj in [staged]+list(staged.rglob('*')):
+            os.chown(obj,0,gid)
+            os.chmod(obj,0o750 if obj.is_dir() else 0o640)
+        require(not (PANEL/'public').is_symlink(), 'Öffentliches Webverzeichnis ist ein Symlink.')
+        old_public=ROOT/('.bedrock-panel-old-'+str(os.getpid()))
+        require(not old_public.exists() and not old_public.is_symlink(), 'Altes Webverzeichnis-Staging existiert.')
+        os.replace(PANEL/'public',old_public)
+        modified=True
+        try:
+            os.replace(staged,PANEL/'public')
+        except BaseException:
+            os.replace(old_public,PANEL/'public')
+            modified=False
+            raise
+        os.chmod(PANEL,0o750)
+        os.chown(PANEL,0,gid)
+        require(not (PANEL/'set-password.php').is_symlink(), 'Bestehende Passwort-Verwaltung ist ein Symlink.')
+        shutil.copy2(new_set_password,PANEL/'set-password.php')
+        os.chown(PANEL/'set-password.php',0,gid)
+        os.chmod(PANEL/'set-password.php',0o640)
+        (PANEL/'VERSION').write_text(tag[1:]+'\n')
+        os.chown(PANEL/'VERSION',0,0)
+        os.chmod(PANEL/'VERSION',0o644)
+        print('5/6 Führe Funktionstests aus ...',flush=True)
+        cmd(shutil.which('runuser') or '/usr/sbin/runuser','-u','www-data','--','php','-l',PANEL/'public/index.php',timeout=30)
+        cmd('/usr/sbin/apache2ctl','configtest',timeout=30)
+        cmd('/usr/bin/systemctl','restart','apache2',timeout=60)
+        cmd('/usr/bin/curl','--silent','--show-error','--fail','--max-time','8',
+            '-o','/dev/null','http://127.0.0.1:8088/',timeout=20)
+        require((PANEL/'VERSION').read_text().strip()==tag[1:], 'Version nach Update stimmt nicht.')
+        after=cmd('/usr/bin/systemctl','is-active','mcbedrock.service',check=False).stdout.strip()
+        require(before==after,'Minecraft-Status hat sich während des Updates geändert.')
+        print('6/6 Update erfolgreich: '+old_version+' -> '+tag[1:])
+        print('Snapshot für manuellen Rücksprung: '+snapshot)
+        print('Minecraft-Dienststatus unverändert: '+(after or 'nicht vorhanden'))
+        shutil.rmtree(old_public,ignore_errors=True)
+        modified=False
+    except BaseException as exc:
+        print('UPDATE-FEHLER: '+str(exc),file=sys.stderr,flush=True)
+        if modified and snapshot:
+            print('ROLLBACK: Stelle Snapshot '+snapshot+' wieder her ...',flush=True)
+            try:
+                cmd(BACKUP,'restore',snapshot,'--confirm-restore',timeout=240)
+                cmd('/usr/sbin/apache2ctl','configtest',timeout=30)
+                cmd('/usr/bin/systemctl','restart','apache2',timeout=60)
+                cmd('/usr/bin/curl','--silent','--show-error','--fail','--max-time','8',
+                    '-o','/dev/null','http://127.0.0.1:8088/',timeout=20)
+                print('ROLLBACK erfolgreich; ursprüngliche Version '+old_version+' aktiv.')
+            except BaseException as roll_exc:
+                print('KRITISCH: Automatischer Rollback fehlgeschlagen: '+str(roll_exc),file=sys.stderr)
+                print('Snapshot zur manuellen Wiederherstellung: '+snapshot,file=sys.stderr)
+        raise
+    finally:
+        shutil.rmtree(workspace,ignore_errors=True)
+        if staged is not None and staged.exists():
+            shutil.rmtree(staged,ignore_errors=True)
+        if old_public is not None and old_public.exists():
+            # Keep the previous tree if recovery failed; it can help with manual repair.
+            if not modified:
+                shutil.rmtree(old_public,ignore_errors=True)
+
+def main():
+    require(os.geteuid()==0,'Nur als root ausführbar.')
+    require(len(sys.argv)==7 and sys.argv[1]=='install-local' and sys.argv[-1]=='--confirm-update',
+            'Aufruf: bedrock-panel-apply-release install-local TAG ZIP MANIFEST SIGNATUR --confirm-update')
+    LOCK.parent.mkdir(parents=True,exist_ok=True)
+    fd=os.open(LOCK,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        install(*sys.argv[2:6])
+    finally:
+        os.close(fd)
+
+if __name__=='__main__':
+    try:main()
+    except (UpgradeError,OSError,ValueError,KeyError,subprocess.TimeoutExpired,
+            BlockingIOError,zipfile.BadZipFile) as error:
+        print('FEHLER: '+str(error),file=sys.stderr)
+        sys.exit(1)

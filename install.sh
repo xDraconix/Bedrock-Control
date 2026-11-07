@@ -21,7 +21,7 @@ install_dependencies() {
   echo 'Prüfe und installiere benötigte Debian-Pakete (apt-get) ...'
   apt-get update
   apt-get install -y --no-install-recommends \
-    apache2 libapache2-mod-php php-cli php-common \
+    openssl apache2 libapache2-mod-php php-cli php-common \
     python3 sudo zip unzip curl screen procps acl ca-certificates libcurl4 libstdc++6 zlib1g
   # CLI and Apache must use a compatible PHP version. Debian's default packages
   # provide the default Apache module; do not silently overwrite custom PHP.
@@ -74,6 +74,7 @@ if [[ -d /opt/bedrock-control-pro ]]; then
 fi
 install -d -m 0755 /opt/bedrock-control-pro
 cp -a "$ROOT/app/." /opt/bedrock-control-pro/
+install -m 0644 -o root -g root "$ROOT/VERSION" /opt/bedrock-control-pro/VERSION
 # Public web files must be readable by Apache (www-data). Source ZIPs may
 # contain restrictive modes (e.g. index.php 0600 root:root).
 # Do not apply these permissions recursively to config/ or other private data.
@@ -109,6 +110,16 @@ if [[ -f /opt/bedrock-control-pro/config/password.hash ]]; then
   chmod 0640 /opt/bedrock-control-pro/config/password.hash
 fi
 install -d -m 0755 /usr/local/share/bedrock-control-pro
+# Verifier is a root-owned tool; no automatic trusted key installation.
+install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-verify-release" /usr/local/bin/bedrock-panel-verify-release
+install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-recovery" /usr/local/bin/bedrock-panel-recovery
+install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-update-test" /usr/local/bin/bedrock-panel-update-test
+install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-apply-release" /usr/local/bin/bedrock-panel-apply-release
+# Dedicated root-only directory. The web server has no write permission here.
+install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-worker" /usr/local/sbin/bedrock-panel-self-update-worker
+install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-control" /usr/local/sbin/bedrock-panel-self-update-control
+install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-panel-self-update.service" /etc/systemd/system/bedrock-panel-self-update.service
+install -d -m 0700 -o root -g root /var/lib/bedrock-panel-update-staging
 for f in start_server.sh stop_server.sh mcbedrock.service; do
   install -m 0644 -o root -g root "$ROOT/system/setup-assets/$f" "/usr/local/share/bedrock-control-pro/$f"
 done
@@ -175,5 +186,5 @@ if [[ ! -s /opt/bedrock-control-pro/config/password.hash ]]; then
   echo 'Administrator-Passwort jetzt einrichten:'
   php /opt/bedrock-control-pro/set-password.php
 fi
-echo 'Installation abgeschlossen (v2.4.3): http://SERVER-IP:8088/'
+echo 'Installation abgeschlossen (v2.5.3): http://SERVER-IP:8088/'
 echo 'Bestehende Minecraft-Server wurden nicht neu gestartet oder überschrieben. Bei Neuinstallation: Webpanel öffnen und Setup-Assistent verwenden.'
