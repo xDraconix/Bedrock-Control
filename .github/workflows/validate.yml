@@ -19,6 +19,8 @@ jobs:
       - name: Check Bash and PHP syntax
         run: |
           bash -n install.sh
+          bash -n release-tools/build-release.sh
+          bash -n release-tools/sign-release.sh
           php -l app/public/index.php
           php -l app/set-password.php
       - name: Check browser JavaScript syntax
@@ -41,3 +43,8 @@ jobs:
         run: openssl pkey -pubin -in system/release/trusted-release-key.pem -noout
       - name: Check sudoers syntax
         run: sudo visudo -cf system/sudoers/bedrock-control-pro
+      - name: Build and validate unsigned installer ZIP
+        run: |
+          bash release-tools/build-release.sh
+          unzip -tq dist/Bedrock-Control-PRO-v2.5.4-Release.zip
+          unzip -p dist/Bedrock-Control-PRO-v2.5.4-Release.zip bedrock-control-pro-2.5.4-installer/VERSION | grep -qx 2.5.4
