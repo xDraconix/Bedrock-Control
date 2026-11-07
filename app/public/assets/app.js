@@ -288,9 +288,9 @@ async function loadWorlds(){
    if(details.length)info.append(meta);
    const seedBox=document.createElement('div');seedBox.className='world-seed-row';
    const seedLabel=document.createElement('span');seedLabel.className='muted tiny';seedLabel.textContent='Weltseed:';
-   const seedValue=document.createElement('code');seedValue.textContent=(typeof w.seed==='string'&&/^-?\\d{1,20}$/.test(w.seed))?w.seed:'Nicht verfügbar';
+   const seedValue=document.createElement('code');seedValue.textContent=(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed))?w.seed:'Nicht verfügbar';
    seedBox.append(seedLabel,seedValue);
-   if(typeof w.seed==='string'&&/^-?\\d{1,20}$/.test(w.seed)){
+   if(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed)){
     const seedCopy=document.createElement('button');seedCopy.className='secondary';seedCopy.textContent='Kopieren';
     seedCopy.title='Weltseed in Zwischenablage kopieren';
     seedCopy.addEventListener('click',async()=>{
