@@ -105,7 +105,125 @@ async function backups(){try{const d=await api('backups');const el=$('backupList
  }catch(e){showNotice(e.message,true)}
  finally{busy=false;document.querySelectorAll('[data-action]').forEach(b=>b.disabled=false)}
 }
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Update-Manager',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='players')status()}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+// Release notes come from GitHub and are treated as untrusted text.
+// Build Markdown-like formatting with DOM text nodes (never innerHTML).
+function renderReleaseMarkdown(markdown){
+ const container=$('panelReleaseNotes');container.replaceChildren();
+ const lines=String(markdown||'Keine Release Notes hinterlegt.').replace(/\r\n?/g,'\n').split('\n');
+ let list=null,code=null,paragraph=null;
+ const inline=(parent,source)=>{
+  const chunks=String(source).split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https:\/\/[^\s)]+\))/g);
+  for(const chunk of chunks){if(!chunk)continue;
+   let el;
+   if(/^`[^`\n]+`$/.test(chunk)){el=document.createElement('code');el.textContent=chunk.slice(1,-1);}
+   else if(/^\*\*[^*\n]+\*\*$/.test(chunk)){el=document.createElement('strong');el.textContent=chunk.slice(2,-2);}
+   else if(/^\[[^\]\n]+\]\(https:\/\/[^\s)]+\)$/.test(chunk)){
+    const m=chunk.match(/^\[([^\]]+)\]\((https:\/\/[^\s)]+)\)$/);
+    try{const u=new URL(m[2]);if(u.protocol!=='https:')throw Error('URL');el=document.createElement('a');el.href=u.href;el.target='_blank';el.rel='noopener noreferrer';el.textContent=m[1];}catch(_){el=document.createTextNode(chunk);}
+   }else{el=document.createTextNode(chunk)}
+   parent.append(el);
+  }
+ };
+ for(const line of lines){
+  if(/^\s*```/.test(line)){
+   if(code){code=null;}else{list=null;paragraph=null;code=document.createElement('pre');container.append(code)}
+   continue;
+  }
+  if(code){code.textContent+=(code.textContent?'\n':'')+line;continue}
+  if(!line.trim()){list=null;paragraph=null;continue}
+  const head=line.match(/^(#{1,4})\s+(.+)$/);
+  if(head){list=null;paragraph=null;const h=document.createElement(head[1].length===1?'h3':'h4');inline(h,head[2]);container.append(h);continue}
+  const bullet=line.match(/^\s*[-*+]\s+(.+)$/);
+  if(bullet){paragraph=null;if(!list){list=document.createElement('ul');container.append(list)}const li=document.createElement('li');inline(li,bullet[1]);list.append(li);continue}
+  list=null;
+  if(!paragraph){paragraph=document.createElement('p');container.append(paragraph)}else{paragraph.append(document.createElement('br'))}
+  inline(paragraph,line);
+ }
+}
+async function loadPanelSecurity(){
+ try{
+  const d=await api('panel-security');
+  txt('panelTrustKeyState',d.trusted_key_configured?'Gültig und eingerichtet':'Nicht einsatzbereit');
+  txt('panelTrustKeyFingerprint',d.trusted_key_configured && /^[0-9a-f]{64}$/.test(d.trusted_key_fingerprint||'')
+   ? 'SHA-256 (öffentlicher PEM): '+d.trusted_key_fingerprint.match(/.{1,16}/g).join(' ')
+   : (d.trusted_key_error||'Kein Fingerabdruck verfügbar'));
+  txt('panelAutoInstallState','Prüfe Verfügbarkeit …');
+ }catch(e){txt('panelTrustKeyState','Prüfung fehlgeschlagen');txt('panelTrustKeyFingerprint','Schlüsselstatus konnte nicht geladen werden.');}
+}
+let panelSelectedChannel='stable';
+async function loadPanelChannel(){
+ try{
+  const d=await api('panel-update-channel');
+  panelSelectedChannel=d.channel==='test'?'test':'stable';
+  $('panelUpdateChannel').value=panelSelectedChannel;
+  txt('panelChannelState',panelSelectedChannel==='test'?'Testkanal aktiv – veröffentlichte Pre-Releases':'Stabiler Kanal aktiv');
+ }catch(e){txt('panelChannelState','Updatekanal nicht lesbar: '+e.message);$('panelStartUpdate').disabled=true;}
+}
+$('panelSaveUpdateChannel').addEventListener('click',async()=>{
+ const channel=$('panelUpdateChannel').value;
+ if(!['stable','test'].includes(channel))return;
+ if(channel==='test'&&!confirm('Testkanal aktivieren? Pre-Releases sind möglicherweise instabil und sollten nur auf dem Testserver installiert werden.'))return;
+ $('panelSaveUpdateChannel').disabled=true;
+ try{
+  await api('panel-update-channel',{method:'POST',headers:{'X-CSRF-Token':csrf,'Content-Type':'application/json'},body:JSON.stringify({channel})});
+  panelSelectedChannel=channel;
+  await loadPanelChannel();await loadPanelRelease();
+ }catch(e){showNotice('Updatekanal: '+e.message,true);await loadPanelChannel();}
+ finally{$('panelSaveUpdateChannel').disabled=false;}
+});
+async function loadPanelRelease(){
+ loadPanelSecurity();
+ const button=$('panelCheckReleases');button.disabled=true;
+ await loadPanelChannel();
+ txt('panelUpdateState','Prüfe offizielle GitHub-Releases …');
+ $('panelReleaseLink').hidden=true;
+ try{
+  const d=await api('panel-release');
+  $('panelStartUpdate').disabled=!d.installation_enabled || d.channel!==panelSelectedChannel;
+  txt('panelInstalledVersion',d.installed);
+  txt('panelLatestVersion',d.latest);
+  renderReleaseMarkdown(d.notes);
+  txt('panelReleaseSignatureState',d.signature_assets_present?'Signaturdateien vorhanden – noch nicht verifiziert':'Release nicht signiert');
+  txt('panelAutoInstallState',d.installation_enabled?'Bereit':'Gesperrt (kein signiertes neueres Release)');
+  txt('panelSignatureState', d.signature_assets_present
+   ? (d.trusted_key_configured ? 'Signierte Release-Dateien gefunden; öffentlicher Prüfschlüssel ist eingerichtet. Eine lokale Verifikation vor Installation bleibt erforderlich.' : 'Signierte Release-Dateien gefunden, aber noch kein vertrauenswürdiger Prüfschlüssel eingerichtet.')
+   : 'Dieses Release ist noch nicht digital signiert. Automatische Installation bleibt gesperrt.');
+  txt('panelUpdateState',d.update_available
+   ? (d.installation_enabled?'Signiertes neues Panel-Release ist verfügbar. Update per Klick möglich.':'Neue Version verfügbar, aber Signaturdateien oder vertrauenswürdiger Schlüssel fehlen.')
+   : 'Keine neuere Panel-Version im ausgewählten Kanal verfügbar.');
+  const a=$('panelReleaseLink');
+  if(/^https:\/\/github\.com\/xDraconix\/Bedrock-Control\/releases\/tag\/v\d+\.\d+\.\d+$/.test(d.release_url||'')){
+   a.href=d.release_url;a.hidden=false;
+  }
+ }catch(e){$('panelStartUpdate').disabled=true;txt('panelUpdateState','Versionsprüfung fehlgeschlagen: '+e.message);renderReleaseMarkdown('–');txt('panelSignatureState','Signaturstatus nicht verfügbar.');txt('panelReleaseSignatureState','Nicht ermittelt');txt('panelAutoInstallState','Prüfe Verfügbarkeit …')}
+ finally{button.disabled=false}
+}
+let panelUpdatePoll=null;
+let panelUpdatePollCount=0;
+async function pollPanelUpdate(){
+ try{
+  const d=await api('panel-update-progress');
+  const log=$('panelLiveUpdateLog');log.hidden=false;
+  log.textContent=(d.state||'')+'\n'+(d.logs||'');
+  const active=/ActiveState=activating|ActiveState=active/.test(d.state||'');
+  $('panelStartUpdate').disabled=true;
+  panelUpdatePollCount++;
+  if(!active && panelUpdatePollCount>=3){if(panelUpdatePoll){clearInterval(panelUpdatePoll);panelUpdatePoll=null;}await loadPanelRelease();}
+ }catch(e){txt('panelUpdateState','Update-Protokoll nicht erreichbar: '+e.message);}
+}
+$('panelStartUpdate').addEventListener('click',async()=>{
+ if(!confirm('Signiertes GitHub-Release aus dem Kanal '+(panelSelectedChannel==='test'?'TESTVERSIONEN':'STABIL')+' installieren? Apache wird neu gestartet; Minecraft soll weiterlaufen.'))return;
+ $('panelStartUpdate').disabled=true;
+ try{await api('panel-update-start',{method:'POST',headers:{'X-CSRF-Token':csrf}});
+   txt('panelUpdateState','Panel-Updateauftrag gestartet. Protokoll wird geladen …');
+   if(panelUpdatePoll)clearInterval(panelUpdatePoll);
+   panelUpdatePollCount=0;
+   panelUpdatePoll=setInterval(pollPanelUpdate,2500);await sleep(1500);await pollPanelUpdate();
+ }catch(e){showNotice('Panel-Update: '+e.message,true);await loadPanelRelease();}
+});
+$('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
+$('panelCheckReleases').addEventListener('click',loadPanelRelease);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='players')status()}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
 async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}

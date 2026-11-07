@@ -1,0 +1,50 @@
+name: Validate Bedrock Control PRO
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/panel-updater-v2.5.0]
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-release-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PHP CLI
+        run: sudo apt-get update && sudo apt-get install -y php-cli
+      - name: Check Bash and PHP syntax
+        run: |
+          bash -n install.sh
+          bash -n release-tools/build-release.sh
+          bash -n release-tools/sign-release.sh
+          php -l app/public/index.php
+          php -l app/set-password.php
+      - name: Check browser JavaScript syntax
+        run: node --check app/public/assets/app.js
+      - name: Check Python update tools
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          files = [
+              Path("system/usr-local-bin/bedrock-panel-apply-release"),
+              Path("system/usr-local-bin/bedrock-panel-verify-release"),
+              Path("system/usr-local-bin/bedrock-panel-recovery"),
+              Path("system/usr-local-sbin/bedrock-panel-self-update-worker")
+          ]
+          for path in files:
+              compile(path.read_bytes(), str(path), "exec")
+              print("OK:", path)
+          PY
+      - name: Check public release verification key
+        run: openssl pkey -pubin -in system/release/trusted-release-key.pem -noout
+      - name: Check sudoers syntax
+        run: sudo visudo -cf system/sudoers/bedrock-control-pro
+      - name: Build and validate unsigned installer ZIP
+        run: |
+          bash release-tools/build-release.sh
+          unzip -tq dist/Bedrock-Control-PRO-v2.5.4-Release.zip
+          unzip -p dist/Bedrock-Control-PRO-v2.5.4-Release.zip bedrock-control-pro-2.5.4-installer/VERSION | grep -qx 2.5.4

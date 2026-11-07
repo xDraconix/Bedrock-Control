@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Offline verification of Bedrock Control PRO release assets (NO installation)."""
+import hashlib
+import os
+import re
+import stat
+import subprocess
+import sys
+import zipfile
+from pathlib import Path, PurePosixPath
+
+KEY_PATH = Path('/etc/bedrock-control-pro/trusted-release-key.pem')
+MAX_ZIP = 256 * 1024 * 1024
+MAX_UNCOMPRESSED = 1024 * 1024 * 1024
+MAX_MEMBERS = 5000
+MAX_MEMBER = 512 * 1024 * 1024
+MAX_RATIO = 250
+
+def fail(message):
+    print('FEHLER: ' + message, file=sys.stderr)
+    raise SystemExit(1)
+
+def main():
+    if len(sys.argv) != 5:
+        fail('Aufruf: bedrock-panel-verify-release vX.Y.Z archiv.zip archiv.zip.manifest archiv.zip.manifest.sig')
+    tag, ziparg, marg, sigarg = sys.argv[1:]
+    if re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) is None:
+        fail('Nur stabile numerische Release-Tags erlaubt (vX.Y.Z).')
+    expected_name = 'Bedrock-Control-PRO-' + tag + '-Release.zip'
+    archive = Path(ziparg)
+    manifest_file = Path(marg)
+    signature = Path(sigarg)
+    if archive.name != expected_name or manifest_file.name != expected_name + '.manifest' or signature.name != expected_name + '.manifest.sig':
+        fail('Assetnamen passen nicht zur Version.')
+    if not KEY_PATH.is_file() or KEY_PATH.is_symlink():
+        fail('Vertrauenswürdiger öffentlicher Schlüssel fehlt: ' + str(KEY_PATH))
+    key_st = KEY_PATH.stat()
+    if key_st.st_uid != 0 or (key_st.st_mode & 0o022):
+        fail('Prüfschlüssel muss root gehören und darf nicht gruppen-/weltbeschreibbar sein.')
+    for f in (archive, manifest_file, signature):
+        if not f.is_file() or f.is_symlink():
+            fail('Datei fehlt oder ist ein Symlink: ' + str(f))
+    if archive.stat().st_size > MAX_ZIP or manifest_file.stat().st_size > 4096 or signature.stat().st_size > 1024:
+        fail('Release-Datei überschreitet zulässige Größe.')
+    try:
+        manifest = manifest_file.read_bytes()
+    except OSError as e:
+        fail('Manifest konnte nicht gelesen werden: ' + str(e))
+    expected = b'bedrock-control-pro-release-v1\n' + b'version=' + tag.encode() + b'\n' + b'asset=' + expected_name.encode() + b'\n'
+    if not manifest.startswith(expected):
+        fail('Manifest-Kopf passt nicht zum Release.')
+    lines=manifest.decode('ascii','strict').splitlines()
+    if len(lines) != 5 or not re.fullmatch(r'sha256=[0-9a-f]{64}', lines[3]) or not re.fullmatch(r'size=[0-9]+',lines[4]) or not manifest.endswith(b'\n'):
+        fail('Manifest hat ein ungültiges Format.')
+    # Verify signer BEFORE trusting digest/metadata. Do not use a key fetched from a release.
+    result = subprocess.run(['/usr/bin/openssl','pkeyutl','-verify','-pubin','-inkey',str(KEY_PATH),'-rawin','-in',str(manifest_file),'-sigfile',str(signature)],capture_output=True,text=True,timeout=15)
+    if result.returncode != 0:
+        fail('Digitale Ed25519-Signatur ist ungültig oder Schlüssel passt nicht.')
+    required_size=int(lines[4].split('=',1)[1]); actual_size=archive.stat().st_size
+    if required_size != actual_size:
+        fail('Archivgröße stimmt nicht mit signiertem Manifest überein.')
+    digest=hashlib.sha256()
+    with archive.open('rb') as f:
+        for chunk in iter(lambda:f.read(1024*1024),b''):
+            digest.update(chunk)
+    if digest.hexdigest() != lines[3].split('=',1)[1]:
+        fail('Archiv-SHA-256 weicht vom signierten Manifest ab.')
+    # Zip safety inspection, no extraction. Check entries before any future install step.
+    try:
+        with zipfile.ZipFile(archive) as z:
+            entries=z.infolist()
+            if not entries or len(entries)>MAX_MEMBERS:
+                fail('Ungültige Anzahl Archivdateien.')
+            total=0; seen=set(); has_installer=False
+            for item in entries:
+                name=item.filename
+                if '\\' in name or '\x00' in name or name.startswith('/') or re.match(r'^[A-Za-z]:',name):
+                    fail('Unsicherer Archivpfad: '+name)
+                path=PurePosixPath(name)
+                if any(part in ('..','.') for part in name.rstrip('/').split('/')) or not path.parts:
+                    fail('Pfad-Traversal erkannt: '+name)
+                canonical=name.rstrip('/')
+                if canonical in seen:
+                    fail('Doppelte Archivdatei: '+name)
+                seen.add(canonical)
+                mode=(item.external_attr>>16)
+                typ=stat.S_IFMT(mode)
+                if typ not in (0,stat.S_IFREG,stat.S_IFDIR):
+                    fail('Unsichere Dateitypen (z.B. Symlink): '+name)
+                if item.file_size>MAX_MEMBER:
+                    fail('Archivdatei ist zu groß: '+name)
+                total+=item.file_size
+                if total>MAX_UNCOMPRESSED:
+                    fail('Entpackte Gesamtgröße überschreitet Grenze.')
+                if item.file_size>1024*1024 and item.file_size/max(1,item.compress_size)>MAX_RATIO:
+                    fail('Verdächtiges Komprimierungsverhältnis: '+name)
+                if name == 'bedrock-control-pro-' + tag[1:] + '-installer/install.sh':
+                    has_installer=True
+            if not has_installer:
+                fail('Installationsskript im erwarteten Hauptordner fehlt.')
+            bad=z.testzip()
+            if bad:
+                fail('Defekter ZIP-Eintrag: '+bad)
+    except (OSError,zipfile.BadZipFile,RuntimeError) as e:
+        fail('ZIP-Prüfung fehlgeschlagen: '+str(e))
+    print('OK: Ed25519-Signatur, SHA-256 und Archivstruktur verifiziert: '+expected_name)
+    print('HINWEIS: Es wurde nichts installiert oder ausgeführt.')
+
+if __name__=='__main__':
+    main()

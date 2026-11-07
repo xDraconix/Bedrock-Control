@@ -1,0 +1,17 @@
+[Unit]
+Description=Bedrock Control PRO - signed self-update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/sbin/bedrock-panel-self-update-worker
+TimeoutStartSec=1200
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectHome=read-only
+UMask=0077
+
+# Not enabled: the update runs only after explicit authenticated action.

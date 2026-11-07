@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Bedrock Control PRO updater safety rehearsal: NO release installation.
+
+Commands:
+  bedrock-panel-update-test stage TAG ZIP MANIFEST SIGNATURE
+  bedrock-panel-update-test simulate-failure --confirm-test
+
+This tool is ROOT-ONLY and deliberately not callable by www-data via sudoers.
+Minecraft and its service are NEVER invoked. Simulation briefly replaces only
+Bedrock Control PRO files using the existing, verified recovery tool.
+"""
+import fcntl
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+
+BACKUP=Path('/usr/local/bin/bedrock-panel-recovery')
+VERIFY=Path('/usr/local/bin/bedrock-panel-verify-release')
+PANEL=Path('/opt/bedrock-control-pro')
+LOCK=Path('/run/lock/bedrock-panel-update-test.lock')
+STAGING=Path('/var/lib/bedrock-panel-update-staging')
+
+def fail(message):
+    raise RuntimeError(message)
+
+def call(*args, check=True, timeout=180):
+    result=subprocess.run(list(map(str,args)),text=True,capture_output=True,
+                          check=False,timeout=timeout)
+    for line in (result.stdout,result.stderr):
+        if line: print(line.rstrip(), flush=True)
+    if check and result.returncode:
+        fail(f'Befehl fehlgeschlagen (Exit {result.returncode}): {args[0]}')
+    return result
+
+def lock():
+    LOCK.parent.mkdir(parents=True,exist_ok=True)
+    fd=os.open(LOCK,os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600)
+    fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    return fd
+
+def stage(tag,archive,manifest,signature):
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag):
+        fail('Nur stabile vX.Y.Z-Tags erlaubt.')
+    # Verify complete signed payload, SHA-256 and ZIP structure BEFORE extraction.
+    call(VERIFY,tag,archive,manifest,signature,timeout=120)
+    if STAGING.is_symlink(): fail('Staging-Pfad ist ein Symlink.')
+    STAGING.mkdir(mode=0o700,parents=True,exist_ok=True)
+    if STAGING.stat().st_uid!=0 or STAGING.stat().st_mode & 0o077:
+        fail('Staging-Verzeichnis muss root gehören und Modus 0700 haben.')
+    dest=Path(tempfile.mkdtemp(prefix='verified-'+tag+'-',dir=STAGING))
+    os.chmod(dest,0o700)
+    try:
+        # Only allow paths beneath the exact installer folder, no external links.
+        expected='bedrock-control-pro-'+tag[1:]+'-installer/'
+        with zipfile.ZipFile(archive) as z:
+            entries=z.infolist()
+            for item in entries:
+                if not item.filename.startswith(expected):
+                    fail('Unerwarteter Pfad außerhalb des Installer-Ordners: '+item.filename)
+            z.extractall(dest)
+        entry=dest/expected/'install.sh'
+        if not entry.is_file() or entry.is_symlink():fail('Installationsskript fehlt.')
+        # This is a STAGED, inert copy. Running install.sh is NOT supported here.
+        print('OK: Signiertes Paket verifiziert und sicher bereitgestellt: '+str(dest))
+        print('HINWEIS: Kein Installationsskript ausgeführt; Minecraft unverändert.')
+    except BaseException:
+        shutil.rmtree(dest,ignore_errors=True)
+        raise
+
+def simulate_failure():
+    if not PANEL.is_dir() or PANEL.is_symlink():fail('Webpanel nicht vorhanden/unsicher.')
+    for prog in (BACKUP,VERIFY):
+        if not prog.is_file():fail('Erforderliches Werkzeug fehlt: '+str(prog))
+    # We test a real automatic restore of a panel snapshot after a forced error.
+    # Do not run this while another update or manual panel configuration is ongoing.
+    before=call('/usr/bin/systemctl','is-active','mcbedrock.service',check=False).stdout.strip()
+    result=call(BACKUP,'backup',timeout=180)
+    match=re.search(r'Sicherung erstellt: (/var/backups/bedrock-control-pro/(snapshot-[0-9TZ-]+[a-f0-9]+))',result.stdout)
+    if not match:fail('Snapshot-ID aus Backup-Ausgabe nicht ermittelbar.')
+    snapshot=match.group(2)
+    call(BACKUP,'verify',snapshot,timeout=180)
+    marker=PANEL/('.updater-rollback-test-'+str(os.getpid()))
+    if marker.exists() or marker.is_symlink():fail('Testdatei existiert unerwartet.')
+    marker.write_text('TEMPORAERER TEST - MUSS BEIM ROLLBACK VERSCHWINDEN\n')
+    os.chmod(marker,0o600)
+    try:
+        print('SIMULATION: Fehler nach dem Austausch einer Testdatei absichtlich ausgelöst.')
+        raise RuntimeError('Simulierter Installationsfehler')
+    except RuntimeError as err:
+        print('Erwarteter Fehler: '+str(err))
+        print('Starte automatischen Rollback aus Snapshot '+snapshot)
+        # If this raises, the test reports a failure, never a false success.
+        call(BACKUP,'restore',snapshot,'--confirm-restore',timeout=180)
+    if marker.exists() or marker.is_symlink():
+        fail('ROLLBACK FEHLGESCHLAGEN: Neue Testdatei noch vorhanden.')
+    call('/usr/bin/php','-l',PANEL/'public/index.php',timeout=30)
+    call('/usr/sbin/apache2ctl','configtest',timeout=30)
+    call('/usr/bin/systemctl','daemon-reload',timeout=30)
+    call('/usr/bin/systemctl','restart','apache2',timeout=60)
+    call('/usr/bin/curl','--silent','--show-error','--fail','--max-time','8',
+         '-o','/dev/null','http://127.0.0.1:8088/',timeout=20)
+    after=call('/usr/bin/systemctl','is-active','mcbedrock.service',check=False).stdout.strip()
+    if before!=after:
+        fail(f'Minecraft-Dienststatus verändert: vorher {before!r}, nachher {after!r}')
+    print('OK: Simulierter Update-Fehler automatisch zurückgerollt.')
+    print('OK: Testdatei entfernt, PHP/Apache/Webzugriff geprüft.')
+    print('Minecraft-Dienststatus unverändert: '+(after or 'nicht vorhanden'))
+    print('Snapshot zur Kontrolle: '+snapshot)
+
+def main():
+    if os.geteuid()!=0:fail('Nur als root ausführbar.')
+    if len(sys.argv)==6 and sys.argv[1]=='stage':
+        lock();stage(*sys.argv[2:])
+    elif len(sys.argv)==3 and sys.argv[1]=='simulate-failure' and sys.argv[2]=='--confirm-test':
+        lock();simulate_failure()
+    else:
+        fail('Aufruf: bedrock-panel-update-test stage TAG ZIP MANIFEST SIGNATURE | simulate-failure --confirm-test')
+
+if __name__=='__main__':
+    try:main()
+    except (RuntimeError,subprocess.TimeoutExpired,BlockingIOError,OSError,zipfile.BadZipFile) as exc:
+        print('FEHLER: '+str(exc),file=sys.stderr)
+        sys.exit(1)
