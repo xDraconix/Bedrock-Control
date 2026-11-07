@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-[[ "$EUID" -eq 0 && "$#" -eq 1 && "$1" == start ]] || { echo 'Nur start erlaubt.' >&2; exit 2; }
+[[ "$EUID" -eq 0 ]] || { echo 'Nur root erlaubt.' >&2; exit 2; }
 UNIT=bedrock-panel-self-update.service
-if /usr/bin/systemctl is-active --quiet "$UNIT"; then echo 'Panel-Update läuft bereits.' >&2; exit 1; fi
-/usr/bin/systemctl reset-failed "$UNIT" >/dev/null 2>&1 || true
-/usr/bin/systemctl start --no-block "$UNIT"
-echo 'Panel-Updateauftrag gestartet.'
+CHANNEL_FILE=/etc/bedrock-control-pro/update-channel
+if [[ "$#" -eq 1 && "$1" == start ]]; then
+  if /usr/bin/systemctl is-active --quiet "$UNIT"; then echo 'Panel-Update läuft bereits.' >&2; exit 1; fi
+  /usr/bin/systemctl reset-failed "$UNIT" >/dev/null 2>&1 || true
+  /usr/bin/systemctl start --no-block "$UNIT"
+  echo 'Panel-Updateauftrag gestartet.'
+elif [[ "$#" -eq 2 && "$1" == channel && ( "$2" == stable || "$2" == test ) ]]; then
+  if /usr/bin/systemctl is-active --quiet "$UNIT"; then echo 'Kanalwechsel während eines Updates nicht erlaubt.' >&2; exit 1; fi
+  [[ -d /etc/bedrock-control-pro && ! -L /etc/bedrock-control-pro ]] || { echo 'Konfigurationsverzeichnis fehlt oder ist Symlink.' >&2; exit 1; }
+  [[ "$(stat -c %u /etc/bedrock-control-pro)" == 0 ]] || { echo 'Konfigurationsverzeichnis gehört nicht root.' >&2; exit 1; }
+  [[ ! -L "$CHANNEL_FILE" ]] || { echo 'Updatekanal darf kein Symlink sein.' >&2; exit 1; }
+  /usr/bin/install -m 0600 -o root -g root /dev/null "${CHANNEL_FILE}.new"
+  /usr/bin/printf '%s\n' "$2" > "${CHANNEL_FILE}.new"
+  /usr/bin/chmod 0644 "${CHANNEL_FILE}.new"
+  /usr/bin/mv -f "${CHANNEL_FILE}.new" "$CHANNEL_FILE"
+  echo "Updatekanal: $2"
+else
+  echo 'Nur start oder channel stable|test erlaubt.' >&2
+  exit 2
+fi
