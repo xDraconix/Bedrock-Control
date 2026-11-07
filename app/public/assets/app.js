@@ -293,9 +293,42 @@ async function loadWorlds(){
    if(typeof w.seed==='string'&&/^-?\d{1,20}$/.test(w.seed)){
     const seedCopy=document.createElement('button');seedCopy.className='secondary';seedCopy.textContent='Kopieren';
     seedCopy.title='Weltseed in Zwischenablage kopieren';
-    seedCopy.addEventListener('click',async()=>{
-     try{if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');await navigator.clipboard.writeText(w.seed);showNotice('Weltseed kopiert.')}
-     catch(_){prompt('Weltseed kopieren (Strg+C):',w.seed)}
+    seedCopy.addEventListener('click',()=>{
+     // The dashboard commonly runs on http://SERVER-IP:8088, where the
+     // asynchronous Clipboard API is unavailable outside secure contexts.
+     // The legacy copy command can still work directly in a user click.
+     function copyLegacy(value){
+      const input=document.createElement('textarea');
+      input.value=value;
+      input.readOnly=true;
+      input.setAttribute('aria-hidden','true');
+      input.style.cssText='position:fixed;left:-9999px;top:0;opacity:0;';
+      const selection=window.getSelection();
+      const oldRanges=[];
+      if(selection)for(let i=0;i<selection.rangeCount;i++)oldRanges.push(selection.getRangeAt(i));
+      const previousFocus=document.activeElement;
+      document.body.append(input);
+      let copied=false;
+      try{
+       input.focus({preventScroll:true});
+       input.select();
+       input.setSelectionRange(0,input.value.length);
+       copied=typeof document.execCommand==='function'&&document.execCommand('copy');
+      }finally{
+       input.remove();
+       if(selection){selection.removeAllRanges();for(const range of oldRanges)selection.addRange(range)}
+       if(previousFocus&&typeof previousFocus.focus==='function')previousFocus.focus({preventScroll:true});
+      }
+      return copied;
+     }
+     if(copyLegacy(w.seed)){showNotice('Weltseed in Zwischenablage kopiert.');return}
+     if(window.isSecureContext&&navigator.clipboard?.writeText){
+      navigator.clipboard.writeText(w.seed)
+       .then(()=>showNotice('Weltseed in Zwischenablage kopiert.'))
+       .catch(()=>showNotice('Kopieren nicht möglich. Bitte den sichtbaren Seed markieren und Strg+C drücken.',true));
+      return;
+     }
+     showNotice('Automatisches Kopieren wird von diesem Browser nicht unterstützt. Bitte den sichtbaren Seed markieren und Strg+C drücken.',true);
     });
     seedBox.append(seedCopy);
    }
