@@ -74,3 +74,13 @@ Ein vorbereitetes Installer-ZIP steht zunächst als ChatGPT-Testartefakt zur Ver
 - Bisher nur im isolierten Test überprüft: gültig signierte Fixture, manipuliertes ZIP abgelehnt, erfolgreicher Upgradepfad und HTTP-Fehler mit anschließendem Rollback. **Noch kein Praxistest im Debian-13-Testcontainer.**
 - Bewusste Grenzen: kein Download direkt aus GitHub, kein Browser-Auslöser, keine Aktualisierung der Root-Helper/Systemd-Units über diesen Pfad, keine Garantie bei abruptem Stromausfall oder SIGKILL.
 - Beta-6-Installer befindet sich zunächst als Chat-Artefakt außerhalb des GitHub-Branches; der Branch enthält weiterhin nur die Dokumentation zu Beta 6.
+
+## Beta 8: Opt-in-Testkanal (lokales Testpaket)
+
+- Testkanal wird im Panel nur nach Admin-Login und CSRF-Prüfung aktiviert; sudo erlaubt nur feste Befehle `channel stable` oder `channel test`.
+- Root-eigene Kanaleinstellung `/etc/bedrock-control-pro/update-channel`, bei Upgrades erhalten.
+- Anzeige und Update-Worker wählen unabhängig den neuesten veröffentlichten Pre-release aus den letzten 30 GitHub-Releases. Stabiler Kanal bleibt bei `releases/latest`.
+- Weiterhin Ed25519-Verifikation, Backup, Funktionstests und Rollback vor bzw. nach dem Austausch der Webdateien.
+- Offline-Tests: Testkanal wählt `v2.5.3`, stabiler Kanal `v2.4.3`; PHP/JS/Python/Bash und sudoers-Syntax validiert; **noch kein Debian-13-Praxistest**.
+- Das Installations-ZIP ist als Chat-Artefakt bereitgestellt; der Beta-8-Quellcode ist noch **nicht** in diesen GitHub-Zweig übernommen.
+- Hinweis: Das bereits signierte v2.5.3-Release enthält ältere Webdateien. Nach dessen Installation kann die Beta-8-Kanalauswahl aus der Oberfläche verschwinden, während die Root-eigene Kanaleinstellung bestehen bleibt.
