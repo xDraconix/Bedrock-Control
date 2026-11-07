@@ -31,6 +31,92 @@ def safe_world(name):
 def is_running():
     return subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode==0
 
+# Bedrock worlds store a Little Endian NBT document after an 8-byte header.
+# Metadata is read-only; no LevelDB files, server state or world settings change.
+def read_world_metadata(world):
+    import struct
+    level=world/'level.dat'
+    result={'seed':None,'game_mode':None,'difficulty':None,'level_name':None}
+    try:
+        st=level.lstat()
+        if not stat.S_ISREG(st.st_mode) or st.st_size<11 or st.st_size>8*1024*1024:
+            return result
+        with level.open('rb') as handle:
+            raw=handle.read(8*1024*1024+1)
+        if len(raw)!=st.st_size:
+            return result
+        _,size=struct.unpack_from('<II',raw,0)
+        if size!=len(raw)-8:
+            return result
+        data=memoryview(raw)[8:]
+        pos=0
+        def take(count):
+            nonlocal pos
+            if count<0 or pos+count>len(data):
+                raise ValueError('NBT length invalid')
+            at=pos
+            pos+=count
+            return at
+        def number(fmt):
+            size=struct.calcsize(fmt)
+            return struct.unpack_from(fmt,data,take(size))[0]
+        def string():
+            length=number('<H')
+            at=take(length)
+            return bytes(data[at:at+length]).decode('utf-8','replace')
+        def payload(tag,depth=0):
+            if depth>32:
+                raise ValueError('NBT nesting too deep')
+            fixed={1:'<b',2:'<h',3:'<i',4:'<q',5:'<f',6:'<d'}
+            if tag in fixed:
+                return number(fixed[tag])
+            if tag==8:
+                return string()
+            if tag in (7,11,12):
+                count=number('<i')
+                if count<0:
+                    raise ValueError('NBT array length invalid')
+                take(count*{7:1,11:4,12:8}[tag])
+                return None
+            if tag==9:
+                kind=number('<B')
+                count=number('<i')
+                if count<0 or count>100000 or (kind==0 and count):
+                    raise ValueError('NBT list length invalid')
+                for _ in range(count):
+                    payload(kind,depth+1)
+                return None
+            if tag==10:
+                for _ in range(100000):
+                    kind=number('<B')
+                    if kind==0:
+                        return None
+                    string()
+                    payload(kind,depth+1)
+                raise ValueError('NBT compound too large')
+            raise ValueError('Invalid NBT tag')
+        if number('<B')!=10:
+            return result
+        string() # Root compound name
+        for _ in range(100000):
+            tag=number('<B')
+            if tag==0:
+                break
+            key=string()
+            if key=='RandomSeed' and tag==4:
+                result['seed']=str(payload(tag))
+            elif key=='GameType' and tag==3:
+                result['game_mode']={0:'Überleben',1:'Kreativ',2:'Abenteuer',3:'Zuschauer'}.get(payload(tag))
+            elif key=='Difficulty' and tag==3:
+                result['difficulty']={0:'Friedlich',1:'Einfach',2:'Normal',3:'Schwer'}.get(payload(tag))
+            elif key=='LevelName' and tag==8:
+                result['level_name']=payload(tag)[:128]
+            else:
+                payload(tag)
+    except (OSError,ValueError,struct.error,OverflowError,RecursionError):
+        return {'seed':None,'game_mode':None,'difficulty':None,'level_name':None}
+    return result
+
 def listing():
     active,_=current()
     out=[]
@@ -38,7 +124,7 @@ def listing():
         for p in sorted(WORLDS.iterdir(),key=lambda x:x.name.casefold()):
             if p.is_symlink() or not p.is_dir() or not valid_name(p.name):continue
             if not (p/'level.dat').is_file() or (p/'level.dat').is_symlink():continue
-            out.append({'name':p.name,'selected':p.name==active,'modified':int(p.stat().st_mtime)})
+            out.append({'name':p.name,'selected':p.name==active,'modified':int(p.stat().st_mtime),**read_world_metadata(p)})
     print(json.dumps({'worlds':out,'selected':active,'running':is_running()},ensure_ascii=False))
 
 def select(name):
