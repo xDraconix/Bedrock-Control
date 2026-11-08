@@ -88,6 +88,65 @@ async function status(){try{
  const p=$('statusPill');p.textContent={online:'● Server online',starting:'● Server startet / NetherNet wartet',offline:'● Server offline',failed:'● Serverfehler'}[state];p.className='pill '+state;
  }catch(e){if(e.message==='Nicht angemeldet'){$('app').hidden=true;$('login').hidden=false;return;}showNotice(e.message,true)}
 }
+// Monitoring consumes only bounded, aggregated server metrics. No external chart libraries.
+let monitoringBusy=false, monitoringPoints=[], monitoringWindow='24h';
+const monitorDefinitions=[
+ ['monitorCpuChart','cpu_pct','%','cpu'],
+ ['monitorRamChart','ram_bytes','GiB','ram'],
+ ['monitorPlayersChart','players','Spieler','players']
+];
+function drawMonitorChart(canvas,points,key,unit,metric){
+ const box=canvas.getBoundingClientRect();
+ const width=Math.max(240,Math.round(box.width)),height=220;
+ const scale=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+ canvas.width=Math.round(width*scale);canvas.height=height*scale;
+ const c=canvas.getContext('2d');if(!c)return;
+ c.scale(scale,scale);c.clearRect(0,0,width,height);
+ const dark=getComputedStyle(document.body).color;
+ const color=metric==='cpu'?'#73db91':metric==='ram'?'#66b9ea':'#dfb36e';
+ const left=43,right=12,top=13,bottom=29,plotW=width-left-right,plotH=height-top-bottom;
+ const values=points.map(p=>Number.isFinite(p[key])?p[key]:null);
+ const valid=values.filter(v=>v!==null);
+ c.font='12px system-ui,sans-serif';c.fillStyle=dark;
+ if(!valid.length){c.fillText('Noch keine Messwerte verfügbar',left,Math.round(height/2));return}
+ const max=Math.max(metric==='players'?1:metric==='cpu'?10:0.25,...valid.map(v=>metric==='ram'?v/1073741824:v));
+ const ceiling=metric==='players'?Math.ceil(max):Math.ceil(max*1.18*10)/10;
+ const yFor=v=>top+plotH-(metric==='ram'?v/1073741824:v)/ceiling*plotH;
+ c.globalAlpha=.23;c.strokeStyle=dark;c.lineWidth=1;
+ for(let i=0;i<=4;i++){const y=top+plotH*i/4;c.beginPath();c.moveTo(left,y);c.lineTo(width-right,y);c.stroke()}
+ c.globalAlpha=.85;c.fillStyle=dark;
+ for(let i=0;i<=4;i++){const v=ceiling*(4-i)/4;c.fillText((metric==='players'?v.toFixed(0):v.toFixed(1)),2,top+plotH*i/4+4)}
+ if(points.length>0){const tickCount=Math.min(4,points.length-1);for(let i=0;i<=tickCount;i++){const idx=Math.round(i*(points.length-1)/Math.max(1,tickCount));const ts=points[idx].ts;const label=new Date(ts*1000).toLocaleString('de-DE',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});const x=left+(idx/Math.max(1,points.length-1))*plotW;c.fillText(label,Math.max(left,Math.min(width-95,x-28)),height-6)}}
+ c.globalAlpha=1;c.strokeStyle=color;c.lineWidth=2.2;c.lineJoin='round';c.lineCap='round';
+ let open=false;
+ values.forEach((v,i)=>{if(v===null){open=false;return}const x=left+(i/Math.max(1,values.length-1))*plotW,y=yFor(v);if(!open){c.beginPath();c.moveTo(x,y);open=true}else c.lineTo(x,y);const next=values[i+1];if(next===null||i===values.length-1){c.stroke();open=false}});
+}
+function redrawMonitoring(){
+ for(const [id,key,unit,metric] of monitorDefinitions)drawMonitorChart($(id),monitoringPoints,key,unit,metric);
+}
+async function loadMonitoring(){
+ if(monitoringBusy)return;
+ monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
+ try{
+  const d=await api('monitor-history&window='+encodeURIComponent(monitoringWindow));
+  if(!Array.isArray(d.points)||d.points.length>450)throw Error('Ungültige Monitoring-Antwort');
+  monitoringPoints=d.points;
+  const latest=d.latest;
+  const fresh=latest && Number.isInteger(latest.ts) && Date.now()/1000-latest.ts<180;
+  txt('monitorCpu',fresh && Number.isFinite(latest.cpu_pct)?latest.cpu_pct.toLocaleString('de-DE',{maximumFractionDigits:1})+' %':'–');
+  txt('monitorRam',fresh && Number.isFinite(latest.ram_bytes)?(latest.ram_bytes/1073741824).toLocaleString('de-DE',{maximumFractionDigits:2})+' GiB':'–');
+  txt('monitorPlayers',fresh && Number.isFinite(latest.players)?String(latest.players):'–');
+  txt('monitorTime',latest?new Date(latest.ts*1000).toLocaleTimeString('de-DE'):'–');
+  txt('monitorState',d.points.length+' Datenpunkte · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
+  redrawMonitoring();
+ }catch(e){monitoringPoints=[];redrawMonitoring();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
+ finally{monitoringBusy=false}
+}
+$('monitorReload').addEventListener('click',loadMonitoring);
+$('monitorWindow').addEventListener('change',e=>{monitoringWindow=e.target.value;loadMonitoring()});
+window.addEventListener('resize',()=>{if(!$('monitor').hidden)redrawMonitoring()});
+setInterval(()=>{if(!$('app').hidden&&!$('monitor').hidden)loadMonitoring()},60000);
+
 async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs()}async function action(name){
  if(busy)return;
  const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
@@ -223,7 +282,7 @@ $('panelStartUpdate').addEventListener('click',async()=>{
 });
 $('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
 $('panelCheckReleases').addEventListener('click',loadPanelRelease);
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
 async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}
