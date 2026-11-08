@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Restricted bridge to the existing mcserver GNU screen session."""
-import json, os, re, subprocess, sys, tempfile
+import json, os, re, subprocess, sys, tempfile, pathlib, stat
 
 SESSION = 'mcbedrock'
 USER = 'mcserver'
+BASE = pathlib.Path('/home/mcserver/minecraft_bedrock')
 
 def reply(**kw):
     print(json.dumps(kw, ensure_ascii=False))
@@ -11,10 +12,73 @@ def reply(**kw):
 def screen(*args):
     return subprocess.run(['/usr/sbin/runuser', '-u', USER, '--', '/usr/bin/screen', '-S', SESSION, '-X', *args], capture_output=True, text=True, timeout=8)
 
+def player_state():
+    """Read current Bedrock allowlist and operator membership without editing files."""
+    entries = []
+    permission_ids = set()
+    problems = []
+    for name, limit in [('allowlist.json', 512*1024), ('permissions.json', 512*1024)]:
+        path = BASE/name
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            problems.append(name+' nicht lesbar')
+            continue
+        try:
+            with os.fdopen(fd,'rb') as stream:
+                st=os.fstat(stream.fileno())
+                if not stat.S_ISREG(st.st_mode) or st.st_size>limit:
+                    raise ValueError('Dateityp oder Größe ungültig')
+                contents=stream.read(limit+1)
+                if len(contents)>limit:raise ValueError('Datei zu groß')
+                records=json.loads(contents.decode('utf-8-sig'))
+                if not isinstance(records,list):raise ValueError('Liste erwartet')
+                if name=='allowlist.json':
+                    for item in records[:250]:
+                        if not isinstance(item,dict):continue
+                        player=item.get('name')
+                        xuid=item.get('xuid')
+                        if not isinstance(player,str) or not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}',player) or player.strip()!=player:continue
+                        entries.append({'name':player,'operator':False,'permission_known':False,
+                                        '_xuid':xuid if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 else None})
+                else:
+                    for item in records[:250]:
+                        if not isinstance(item,dict):continue
+                        xuid=item.get('xuid')
+                        if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 and item.get('permission')=='operator':
+                            permission_ids.add(xuid)
+        except (ValueError,UnicodeDecodeError,OSError):
+            problems.append(name+' enthält ungültige Daten')
+        # os.fdopen closes the OS descriptor.
+    for item in entries:
+        if item['_xuid'] is not None:
+            item['permission_known']=True
+            item['operator']=item['_xuid'] in permission_ids
+        del item['_xuid']
+    if len(entries)>1:
+        entries.sort(key=lambda x:x['name'].casefold())
+    props = BASE/'server.properties'
+    allowlist_enabled = None
+    try:
+        with props.open('r',encoding='utf-8') as stream:
+            for line in stream:
+                if line.strip().startswith('allow-list='):
+                    allowlist_enabled=line.strip().split('=',1)[1].strip().lower()=='true'
+    except OSError:
+        pass
+    reply(ok=True, players=entries, allowlist_enabled=allowlist_enabled,
+          warnings=problems, status='snapshot', online_names_available=False)
+
+
 def main():
     if len(sys.argv) < 2: raise ValueError('Aktion fehlt')
     action = sys.argv[1]
-    if action == 'tail':
+    if action == 'players':
+        if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
+        player_state()
+    elif action == 'tail':
         if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
         fd, path = tempfile.mkstemp(prefix='bedrock-screen-',dir='/run/bedrock-control-pro')
         os.close(fd)
@@ -35,9 +99,14 @@ def main():
         elif kind == 'say':
             if not (1 <= len(value) <= 180) or any(ord(c) < 32 or ord(c) == 127 for c in value): raise ValueError('Ungültige Nachricht')
             command = 'say ' + value
-        elif kind in ('kick','ban','pardon'):
+        elif kind in ('kick','op','deop','allowlist-add','allowlist-remove'):
             if not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}', value) or value.strip() != value: raise ValueError('Ungültiger Spielername')
-            command = kind + ' "' + value + '"'
+            if kind.startswith('allowlist-'):
+                command = 'allowlist ' + kind.split('-',1)[1] + ' "' + value + '"'
+            else:
+                command = kind + ' "' + value + '"'
+        elif kind == 'allowlist-list' and value == '':
+            command = 'allowlist list'
         else: raise ValueError('Nicht erlaubter Befehl')
         if subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode != 0: raise ValueError('Minecraft ist nicht gestartet')
         # GNU screen's stuff sends literal characters; newline is a separate carriage return.
