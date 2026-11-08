@@ -229,3 +229,20 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
   padding:12px;
  }
 }
+
+/* v2.7 permission toggles: checked state has distinct outline and check icon in label */
+#players .player-action[aria-pressed="true"]{
+ border-width:2px;
+ box-shadow:0 0 0 1px rgba(222,246,193,.28),inset 0 0 0 1px rgba(255,255,255,.08);
+ filter:brightness(1.15);
+}
+#players .player-action[aria-pressed="false"]{
+ opacity:.83;
+}
+#players .player-action[aria-pressed="false"]:hover{
+ opacity:1;
+}
+#players .player-action[aria-pressed="true"]:focus-visible{
+ outline:3px solid #e1f6aa;
+ outline-offset:3px;
+}
