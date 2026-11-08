@@ -49,6 +49,8 @@ jobs:
         run: sudo python3 tests/test_system_component_install.py
       - name: Test rollback after interrupted component update
         run: sudo python3 tests/test_system_component_rollback.py
+      - name: Syntax-check manual signed E2E rollback harness (not executed in CI)
+        run: python3 -c "import ast,pathlib; ast.parse(pathlib.Path('tests/test_signed_update_rollback_e2e.py').read_text())"
       - name: Check public release verification key
         run: openssl pkey -pubin -in system/release/trusted-release-key.pem -noout
       - name: Check sudoers syntax
