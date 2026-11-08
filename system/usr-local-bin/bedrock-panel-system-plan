@@ -6,6 +6,7 @@ The caller must verify the signed archive before using extracted content.
 """
 import json
 import os
+import subprocess
 import re
 import stat
 import sys
@@ -81,6 +82,15 @@ def plan(source):
             target,mode = '/usr/local/bin/'+name,0o755
         elif rel in FIXED:
             target,mode = FIXED[rel]
+        elif rel=='system/php/99-bedrock-addon-upload.ini':
+            proc=subprocess.run(['/usr/bin/php','-r','echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;'],
+                                capture_output=True,text=True,timeout=10)
+            if proc.returncode!=0 or not re.fullmatch(r'\d+\.\d+',proc.stdout):
+                raise ValueError('PHP-Version für Apache-Konfiguration nicht ermittelbar')
+            target='/etc/php/'+proc.stdout+'/apache2/conf.d/99-bedrock-addon-upload.ini'
+            if not Path(target).parent.is_dir():
+                raise ValueError('Apache-PHP-Konfigurationsordner fehlt')
+            mode=0o644
         else:
             # Minecraft service, server scripts, PHP setup assets are not
             # part of the safe online-update transaction. Manual install only.
