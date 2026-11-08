@@ -275,7 +275,7 @@ async function loadPlayers(){
    const info=document.createElement('div');info.className='player-entry-info';
    const name=document.createElement('strong');name.textContent=player.name;
    const meta=document.createElement('span');meta.className='muted tiny';
-   meta.textContent=player.permission_known?(player.operator?'Operator':'Mitglied'):'Operatorstatus nicht zuordenbar (XUID fehlt)';
+   meta.textContent=player.permission_known?({operator:'Operator',member:'Mitglied',visitor:'Besucher'}[player.permission]||'Status unbekannt'):'Berechtigungsstatus nicht zuordenbar (XUID fehlt oder keine Zuordnung)';
    info.append(name,meta);
    const buttons=document.createElement('div');buttons.className='player-entry-actions';
    const choices=[['kick','Kicken'],['allowlist-remove','Entfernen'],[player.operator?'deop':'op',player.operator?'OP entziehen':'OP erteilen']];
