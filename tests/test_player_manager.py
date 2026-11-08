@@ -159,6 +159,17 @@ connect='''[2026-11-08 14:25:41:839 INFO] Player connected: F4U DraconiX, xuid: 
 [2026-11-08 14:25:47:838 INFO] Player Spawned: F4U DraconiX xuid: 2535419664549744
 '''
 assert mod.connection_events(connect)=={'f4u draconix':'2535419664549744'}
+
+# Exactly the screen hardcopy wrapping observed on Minecraft-Test-2:
+# 25354196645 + 49744 = the full XUID in permissions.json.
+wrapped_connect='''[2026-11-08 20:19:52:400 INFO] Player connected: F4U DraconiX, xuid: 25354196645
+49744
+[2026-11-08 20:19:52:515 INFO] Player PartyIdUpdate: pfid: F018CB2C7E86C411
+'''
+assert mod.connection_events(wrapped_connect)=={'f4u draconix':'2535419664549744'}
+assert mod.connection_events('[2026-11-08 20:19:52:400 INFO] Player connected: F4U DraconiX, xuid: 25354196645\n')=={}, 'Never store truncated XUID'
+assert mod.connection_events('[2026-11-08 20:19:52:400 INFO] Player connected: F4U DraconiX, xuid: 25354196645\n[2026-11-08 20:19:52:500 INFO] Other event\n')=={}, 'Never join across timestamped log lines'
+
 assert mod.connection_events(connect+'[2026-11-08 14:26:41:839 INFO] Player connected: F4U DraconiX, xuid: 1111111111111111\n')=={}
 assert mod.connection_events('Player connected: Bad, xuid: 123')=={}
 assert mod.connection_events(connect+'[2026-11-08 14:26:41:839 INFO] Player connected: Other Gamer, xuid: 2535419664549744\n')=={}
@@ -185,6 +196,16 @@ with tempfile.TemporaryDirectory() as tmp:
     cachefile=mod.CACHE_DIR/'player-identities.json'
     assert json.loads(cachefile.read_text())=={'f4u draconix':'2535419664549744'}
     assert cachefile.stat().st_mode & 0o077==0
+    # An older version stored the first, wrapped fragment as if complete.
+    # Treat the 11-digit cache value as absent and recover on the next join.
+    cachefile.write_text(json.dumps({'f4u draconix':'25354196645'}),encoding='utf-8')
+    with patch.object(mod,'screen_capture',return_value=wrapped_connect) as capture:
+        with redirect_stdout(out:=io.StringIO()):
+            mod.player_state()
+    assert capture.call_count==1
+    assert json.loads(out.getvalue())['players'][0]['operator'] is True
+    assert json.loads(cachefile.read_text())['f4u draconix']=='2535419664549744'
+
     with patch.object(mod,'screen_capture',side_effect=AssertionError('unexpected rescan')):
         with redirect_stdout(out:=io.StringIO()):
             mod.player_state()
