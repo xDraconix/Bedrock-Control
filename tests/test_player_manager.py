@@ -75,3 +75,30 @@ with patch.object(mod,'screen',fake_screen),patch.object(mod.subprocess,'run',re
             else:
                 raise AssertionError('Invalid name accepted: '+repr(value))
 print('OK: roster/permissions mapping, symlink protection and safe Bedrock player commands')
+
+
+# Regression based on the actual Bedrock 1.26.63.1 list output supplied
+# by the test-container operator. A line break separates each player.
+sample='''[2026-11-08 14:26:36:355 INFO] There are 1/10 players online:
+F4U DraconiX
+allowlist add "F4U DraconiX"
+[2026-11-08 14:29:41:112 INFO] Added F4U DraconiX to the allowlist
+'''
+parsed=mod.parse_online_list(sample)
+assert parsed is not None, 'Online header not detected'
+assert parsed['players']==['F4U DraconiX']
+assert parsed['count']==1 and parsed['max_players']==10
+assert mod.parse_online_list('[2026-11-08 14:26:36:355 INFO] There are 2/10 players online:\nF4U DraconiX\n') is None
+assert mod.parse_online_list('[2026-11-08 14:26:36:355 INFO] There are 0/10 players online:\n') is not None
+assert mod.parse_online_list('Some old player joined') is None
+assert mod.parse_online_list('[2026-11-08 14:26:36:355 INFO] There are 1/10 players online:\nBad"name\n') is None
+
+# A new response must be distinct from the preexisting screen history.
+existing=sample+'list\n'
+fresh=existing+'''[2026-11-08 15:30:08:015 INFO] There are 2/10 players online:
+F4U DraconiX
+Player Two
+'''
+assert mod.parse_online_list(fresh)['players']==['F4U DraconiX','Player Two']
+assert mod.parse_online_list(existing)['response_id']!=mod.parse_online_list(fresh)['response_id']
+print('OK: live player list parser rejects malformed, partial or stale responses')
