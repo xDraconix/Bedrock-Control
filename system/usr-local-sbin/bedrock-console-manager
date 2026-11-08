@@ -92,6 +92,7 @@ def player_state():
     entries = []
     permission_levels = {}
     problems = []
+    names_without_xuid = 0
     for name, limit in [('allowlist.json', 512*1024), ('permissions.json', 512*1024)]:
         path = BASE/name
         try:
@@ -109,6 +110,9 @@ def player_state():
                 contents=stream.read(limit+1)
                 if len(contents)>limit:raise ValueError('Datei zu groß')
                 records=json.loads(contents.decode('utf-8-sig'))
+                # A default Bedrock allowlist may contain JSON null instead of [].
+                # It means there are no entries; it is valid JSON, not a corrupt file.
+                if records is None and name=='allowlist.json': records=[]
                 if not isinstance(records,list):raise ValueError('Liste erwartet')
                 if name=='allowlist.json':
                     for item in records[:250]:
@@ -116,8 +120,10 @@ def player_state():
                         player=item.get('name')
                         xuid=item.get('xuid')
                         if not isinstance(player,str) or not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}',player) or player.strip()!=player:continue
+                        valid_xuid = xuid if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 else None
+                        if valid_xuid is None: names_without_xuid += 1
                         entries.append({'name':player,'operator':False,'permission_known':False,'permission':None,
-                                        '_xuid':xuid if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 else None})
+                                        '_xuid':valid_xuid})
                 else:
                     for item in records[:250]:
                         if not isinstance(item,dict):continue
@@ -128,6 +134,8 @@ def player_state():
         except (ValueError,UnicodeDecodeError,OSError):
             problems.append(name+' enthält ungültige Daten')
         # os.fdopen closes the OS descriptor.
+    if names_without_xuid:
+        problems.append(f'{names_without_xuid} Allowlist-Eintrag/Einträge ohne XUID; OP-Rechte nicht zuordenbar')
     for item in entries:
         if item['_xuid'] in permission_levels:
             item['permission_known']=True
