@@ -11,7 +11,8 @@
 
 ## Einschränkungen
 
-- Es werden **noch keine Online-Spielernamen automatisch** aus dem Konsolen-Log extrahiert. Die Online-Spielerzahl stammt wie zuvor aus NetherNet; über die Schaltfläche wird der Konsolenbefehl `list` ausgeführt.
+- Online-Spielernamen werden alle 15 Sekunden über eine **frische** `list`-Antwort aus GNU SCREEN abgefragt; bei Timeout oder unvollständiger Antwort zeigt die Oberfläche keinen veralteten Stand. Die Spielerzahl auf dem Dashboard stammt weiterhin von NetherNet.
+- Die Abfrage nutzt die vorhandene Konsole, benötigt weder neue Add-ons noch einen Neustart. GNU SCREEN liefert auf dem Testserver pro Name eine eigene Zeile nach `There are N/M players online:`. Bei Formatänderungen der Bedrock-Version kann die Erkennung einen Fehler statt falscher Namen anzeigen.
 - Nach einem Konsolenbefehl bestätigt das Panel nur die Übergabe an GNU SCREEN, nicht die erfolgreiche Anwendung durch Minecraft. Bei Änderungen die Live-Konsole kontrollieren.
 - `permissions.json` enthält XUIDs ohne zwingende Zuordnung zum Gamertag. Ein Spieler ohne XUID kann daher durchaus Operator sein, obwohl dies die Ansicht nicht bestimmen kann.
 - Die Allowlist wird erst dann zur Zugangssperre, wenn `allow-list=true` aktiv ist. Für eine Änderung dieser Servereigenschaft können weitere Schritte nötig sein.
@@ -21,7 +22,7 @@
 ## Test / Release
 
 - Branch: `feature/player-management-v2.7.0`
-- Neue API: `GET /?api=players-state`, bestehende authentifizierte/CSRF-geschützte `console-send`-API für Aktionen.
+- APIs: `GET /?api=players-state` (Allowlist und Rollen), `GET /?api=players-online` (frische Bedrock-Konsolenantwort), bestehende authentifizierte/CSRF-geschützte `console-send`-API für Aktionen.
 - Root-Konsole: `/usr/local/sbin/bedrock-console-manager players` sowie `send allowlist-add|allowlist-remove|op|deop|kick NAME`.
 - Test: `python3 tests/test_player_manager.py`
 - Das v2.6.0-Update-System kann den geänderten, signierten Root-Helper künftig selbst aktualisieren; für Tests auf bestehendem v2.6.0-Container ist `bash install.sh` aus dem Entwicklungsbranch möglich.
