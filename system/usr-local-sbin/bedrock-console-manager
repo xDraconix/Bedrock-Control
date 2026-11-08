@@ -13,7 +13,337 @@ def screen(*args):
     return subprocess.run(['/usr/sbin/runuser', '-u', USER, '--', '/usr/bin/screen', '-S', SESSION, '-X', *args], capture_output=True, text=True, timeout=8)
 
 CACHE_DIR = pathlib.Path('/var/lib/bedrock-control-pro')
-CONNECT_EVENT = re.compile(r'^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+ INFO\] Player connected: ([A-Za-z0-9_ .-]{1,32}), xuid: ([0-9]{1,24})\s*$', re.MULTILINE)
+CONNECT_EVENT = re.compile(r'^\[[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+ INFO\] Player connected: ([A-Za-z0-9_ .-]{1,32}), xuid: ([0-9]{1,24})
+LIST_HEADER = re.compile(r'^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+) INFO\] There are ([0-9]+)/([0-9]+) players online:', re.MULTILINE)
+PLAYER_NAME = re.compile(r'[A-Za-z0-9_ .-]{1,32}\Z')
+
+
+def screen_capture():
+    """Read bounded SCREEN scrollback, without modifying the server world."""
+    fd, path = tempfile.mkstemp(prefix='bedrock-screen-',dir='/run/bedrock-control-pro')
+    os.close(fd)
+    os.chown(path, __import__('pwd').getpwnam(USER).pw_uid, __import__('grp').getgrnam(USER).gr_gid)
+    os.chmod(path, 0o600)
+    try:
+        r = screen('-p', '0', 'hardcopy', '-h', path)
+        if r.returncode != 0:
+            raise ValueError('SCREEN-Konsole nicht verfügbar: '+r.stderr.strip()[:180])
+        with open(path, 'r', encoding='utf-8', errors='replace') as stream:
+            return stream.read()[-32000:]
+    finally:
+        os.unlink(path)
+
+
+def parse_online_list(output):
+    """Extract only a complete list-response; never invent online players."""
+    matches=list(LIST_HEADER.finditer(output))
+    if not matches:
+        return None
+    match=matches[-1]
+    count=int(match.group(2))
+    limit=int(match.group(3))
+    if count>1000 or limit>1000 or count>limit:
+        return None
+    lines=output[match.end():].splitlines()
+    # The header is followed by one gamertag per line in Bedrock 1.26.63.1.
+    names=[]
+    for line in lines:
+        value=line.strip()
+        if not value and not names:
+            continue
+        if len(names)==count:
+            break
+        if not PLAYER_NAME.fullmatch(value) or value.startswith('['):
+            return None
+        names.append(value)
+    if len(names)!=count or len(set(names))!=count:
+        return None
+    return {'players':names,'count':count,'max_players':limit,
+            'response_id':match.group(1)+'|'+match.group(2)+'|'+match.group(3)}
+
+
+
+def connection_events(output):
+    """Read full Bedrock XUIDs, including hardcopy-wrapped numeric lines.
+
+    SCREEN wraps at the terminal width, e.g. a 16-digit XUID becomes
+    11 digits on the timestamped line and 5 on the next display line.
+    Never accept a short fragment as a separate identity.
+    """
+    found, conflicts = {}, set()
+    lines = output.splitlines()
+    for index, line in enumerate(lines):
+        match = CONNECT_EVENT.fullmatch(line.rstrip())
+        if not match:
+            continue
+        name, xuid = match.groups()
+        if name.strip() != name:
+            continue
+        if index + 1 < len(lines):
+            next_line = lines[index + 1].strip()
+            # Only digits on the *immediately* following unprefixed line can
+            # be a wrapped XUID; never join a second timestamped log event.
+            if next_line.isascii() and next_line.isdigit() and len(xuid + next_line) <= 20:
+                xuid += next_line
+        # Reject truncated hardcopy output and untrusted partial XUIDs.
+        if not (15 <= len(xuid) <= 20):
+            continue
+        key = name.casefold()
+        if key in found and found[key] != xuid:
+            conflicts.add(key)
+        found[key] = xuid
+    # Do not treat changed names or conflicting identities as verified.
+    values = list(found.values())
+    repeated_xuids = {xuid for xuid in values if values.count(xuid) > 1}
+    for name, xuid in list(found.items()):
+        if name in conflicts or xuid in repeated_xuids:
+            del found[name]
+    return found
+
+
+def identity_cache(needed):
+    """Resolve only missing names. Scan bounded SCREEN scrollback only on cache miss.
+
+    Root-owned persistent cache is non-public and does not contain permission levels.
+    Ambiguous identities are never attributed an OP status.
+    """
+    if needed is not None and not needed:
+        return {}, []
+    CACHE_DIR.mkdir(mode=0o700, parents=False, exist_ok=True)
+    st = CACHE_DIR.lstat()
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
+        raise ValueError('Identitäts-Cacheverzeichnis ist nicht sicher')
+    lockfd = os.open(CACHE_DIR/'player-identities.lock',
+                     os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW|os.O_CLOEXEC, 0o600)
+    try:
+        fcntl.flock(lockfd, fcntl.LOCK_EX)
+        path = CACHE_DIR/'player-identities.json'
+        cached = {}
+        if path.exists() or path.is_symlink():
+            fd = os.open(path, os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+            with os.fdopen(fd, 'rb') as stream:
+                fst = os.fstat(stream.fileno())
+                if not stat.S_ISREG(fst.st_mode) or fst.st_uid != os.geteuid() or fst.st_mode & 0o077 or fst.st_size > 65536:
+                    raise ValueError('Identitäts-Cachedatei ist nicht sicher')
+                raw = json.loads(stream.read(65537).decode('utf-8'))
+            if not isinstance(raw, dict):
+                raise ValueError('Identitäts-Cacheformat ungültig')
+            for key, xuid in raw.items():
+                if (isinstance(key, str) and PLAYER_NAME.fullmatch(key)
+                        and key.strip()==key and key==key.casefold()
+                        and isinstance(xuid, str) and (xuid=='' or (xuid.isascii() and xuid.isdigit() and 15<=len(xuid)<=20))):
+                    cached[key]=xuid
+        if needed is None:
+            return {name:xuid for name,xuid in cached.items() if xuid}, []
+        missing = {name.casefold() for name in needed if name.casefold() not in cached}
+        warnings = []
+        if missing:
+            try:
+                observed = connection_events(screen_capture())
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                observed = {}
+                warnings.append('SCREEN-Historie für XUID-Zuordnung nicht verfügbar')
+            # Never override a known cached name with a conflicting XUID.
+            for name, xuid in observed.items():
+                if name in cached and cached[name] != xuid:
+                    cached[name]=''  # Permanent fail-closed marker until an admin clears the cache.
+                    warnings.append('Widersprüchliche XUID-Zuordnung; Status bleibt unbekannt')
+                    continue
+                if name not in cached and len(cached)<250:
+                    # A single XUID must not be ascribed to two different gamertags.
+                    if xuid not in cached.values():
+                        cached[name]=xuid
+            # Atomically write the cache only when new identities were learned.
+            if observed:
+                fd, temp = tempfile.mkstemp(prefix='.identities-',dir=str(CACHE_DIR))
+                try:
+                    os.fchmod(fd,0o600)
+                    with os.fdopen(fd,'w',encoding='utf-8') as stream:
+                        json.dump(cached,stream,ensure_ascii=False)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(temp,path)
+                finally:
+                    if os.path.exists(temp):
+                        os.unlink(temp)
+        return {name:cached[name] for name in needed if name in cached and cached[name]}, warnings
+    finally:
+        os.close(lockfd)
+
+
+def online_players():
+    if subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode:
+        raise ValueError('Minecraft ist nicht gestartet')
+    # Only this read-only query is serialized to avoid overlapping responses.
+    lockfile='/run/bedrock-control-pro/online-players.lock'
+    fd=os.open(lockfile,os.O_WRONLY|os.O_CREAT|os.O_CLOEXEC|os.O_NOFOLLOW,0o600)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        old=parse_online_list(screen_capture())
+        old_id=old['response_id'] if old else None
+        sent=screen('stuff','list\r')
+        if sent.returncode:
+            raise ValueError('SCREEN-Befehl fehlgeschlagen: '+sent.stderr.strip()[:180])
+        for _ in range(16):
+            time.sleep(0.25)
+            found=parse_online_list(screen_capture())
+            if found is not None and found['response_id']!=old_id:
+                del found['response_id']
+                # Warm the persistent cache for newly seen online names. The
+                # roster must remain available if optional identity lookup fails.
+                try:
+                    identity_cache({name.casefold() for name in found['players']})
+                except (OSError, ValueError):
+                    pass
+                reply(ok=True,online=True,**found)
+                return
+        raise ValueError('Keine frische, vollständig lesbare Antwort auf list innerhalb von 4 Sekunden')
+    except BlockingIOError:
+        raise ValueError('Eine Spielerabfrage läuft bereits')
+    finally:
+        os.close(fd)
+
+
+def player_state():
+    """Read current Bedrock allowlist and operator membership without editing files."""
+    entries = []
+    permission_levels = {}
+    problems = []
+    names_without_xuid = 0
+    for name, limit in [('allowlist.json', 512*1024), ('permissions.json', 512*1024)]:
+        path = BASE/name
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            problems.append(name+' nicht lesbar')
+            continue
+        try:
+            with os.fdopen(fd,'rb') as stream:
+                st=os.fstat(stream.fileno())
+                if not stat.S_ISREG(st.st_mode) or st.st_size>limit:
+                    raise ValueError('Dateityp oder Größe ungültig')
+                contents=stream.read(limit+1)
+                if len(contents)>limit:raise ValueError('Datei zu groß')
+                records=json.loads(contents.decode('utf-8-sig'))
+                # A default Bedrock allowlist may contain JSON null instead of [].
+                # It means there are no entries; it is valid JSON, not a corrupt file.
+                if records is None and name=='allowlist.json': records=[]
+                if not isinstance(records,list):raise ValueError('Liste erwartet')
+                if name=='allowlist.json':
+                    for item in records[:250]:
+                        if not isinstance(item,dict):continue
+                        player=item.get('name')
+                        xuid=item.get('xuid')
+                        if not isinstance(player,str) or not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}',player) or player.strip()!=player:continue
+                        valid_xuid = xuid if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 else None
+                        if valid_xuid is None: names_without_xuid += 1
+                        entries.append({'name':player,'operator':False,'permission_known':False,'permission':None,
+                                        '_xuid':valid_xuid})
+                else:
+                    for item in records[:250]:
+                        if not isinstance(item,dict):continue
+                        xuid=item.get('xuid')
+                        permission=item.get('permission')
+                        if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 and permission in ('operator','member','visitor'):
+                            permission_levels[xuid]=permission
+        except (ValueError,UnicodeDecodeError,OSError):
+            problems.append(name+' enthält ungültige Daten')
+        # os.fdopen closes the OS descriptor.
+    missing_names={item['name'].casefold() for item in entries if item['_xuid'] is None}
+    if missing_names:
+        try:
+            recovered, cache_warnings = identity_cache(missing_names)
+            problems.extend(cache_warnings)
+            for item in entries:
+                if item['_xuid'] is None:
+                    item['_xuid']=recovered.get(item['name'].casefold())
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            problems.append('Identitäts-Cache nicht verfügbar: '+str(exc)[:100])
+    unresolved=sum(item['_xuid'] is None for item in entries)
+    if unresolved:
+        problems.append(f'{unresolved} Allowlist-Eintrag/Einträge ohne zuordenbare XUID')
+    for item in entries:
+        if item['_xuid'] in permission_levels:
+            item['permission_known']=True
+            item['permission']=permission_levels[item['_xuid']]
+            item['operator']=item['permission']=='operator'
+        del item['_xuid']
+    if len(entries)>1:
+        entries.sort(key=lambda x:x['name'].casefold())
+    # Cache carries identities only. The authoritative permission remains
+    # permissions.json, even for online players outside the allowlist.
+    identified_players = []
+    try:
+        identities, _ = identity_cache(None)
+        allowed_names = {item['name'].casefold() for item in entries}
+        for name, xuid in identities.items():
+            if name in allowed_names:
+                continue
+            permission = permission_levels.get(xuid)
+            identified_players.append({'name':name,
+                'operator':permission=='operator',
+                'permission_known':permission is not None,
+                'permission':permission, 'allowlisted':False})
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    props = BASE/'server.properties'
+    allowlist_enabled = None
+    try:
+        with props.open('r',encoding='utf-8') as stream:
+            for line in stream:
+                if line.strip().startswith('allow-list='):
+                    allowlist_enabled=line.strip().split('=',1)[1].strip().lower()=='true'
+    except OSError:
+        pass
+    reply(ok=True, players=entries, identified_players=identified_players, allowlist_enabled=allowlist_enabled,
+          warnings=problems, status='snapshot', online_names_available=False)
+
+
+def main():
+    if len(sys.argv) < 2: raise ValueError('Aktion fehlt')
+    action = sys.argv[1]
+    if action == 'players':
+        if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
+        player_state()
+    elif action == 'online':
+        if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
+        online_players()
+    elif action == 'tail':
+        if len(sys.argv) != 2: raise ValueError('Ungültige Parameter')
+        reply(ok=True, logs=screen_capture())
+    elif action == 'send':
+        if len(sys.argv) != 4: raise ValueError('Ungültige Parameter')
+        kind, value = sys.argv[2:]
+        if kind == 'list' and value == '': command = 'list'
+        elif kind in ('day','night') and value == '': command = 'time set ' + kind
+        elif kind == 'say':
+            if not (1 <= len(value) <= 180) or any(ord(c) < 32 or ord(c) == 127 for c in value): raise ValueError('Ungültige Nachricht')
+            command = 'say ' + value
+        elif kind in ('kick','op','deop','allowlist-add','allowlist-remove'):
+            if not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}', value) or value.strip() != value: raise ValueError('Ungültiger Spielername')
+            if kind.startswith('allowlist-'):
+                command = 'allowlist ' + kind.split('-',1)[1] + ' "' + value + '"'
+            else:
+                command = kind + ' "' + value + '"'
+        elif kind == 'allowlist-list' and value == '':
+            command = 'allowlist list'
+        else: raise ValueError('Nicht erlaubter Befehl')
+        if subprocess.run(['/usr/bin/systemctl','is-active','--quiet','mcbedrock.service']).returncode != 0: raise ValueError('Minecraft ist nicht gestartet')
+        # GNU screen's stuff sends literal characters; newline is a separate carriage return.
+        r = screen('stuff', command + '\r')
+        if r.returncode: raise ValueError('SCREEN-Befehl fehlgeschlagen: ' + r.stderr.strip()[:180])
+        reply(ok=True, message='Befehl an Minecraft-Konsole gesendet (Ausführung nicht bestätigt).')
+    else: raise ValueError('Unbekannte Aktion')
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (ValueError, subprocess.TimeoutExpired, OSError) as e:
+        reply(error=str(e))
+        sys.exit(1)
+)
 LIST_HEADER = re.compile(r'^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9:.]+) INFO\] There are ([0-9]+)/([0-9]+) players online:', re.MULTILINE)
 PLAYER_NAME = re.compile(r'[A-Za-z0-9_ .-]{1,32}\Z')
 
