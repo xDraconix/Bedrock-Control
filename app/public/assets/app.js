@@ -262,6 +262,26 @@ $('reloadConsole').addEventListener('click',loadConsole);
 $('consoleList').addEventListener('click',()=>consoleSend('list'));
 $('consoleDay').addEventListener('click',()=>consoleSend('day'));
 $('consoleNight').addEventListener('click',()=>consoleSend('night'));
+function inlinePlayerActions(name){
+ const buttons=document.createElement('div');buttons.className='player-entry-actions';
+ const choices=[
+  ['op','OP','Operatorrechte erteilen'],
+  ['deop','deOP','Operatorrechte entziehen'],
+  ['allowlist-add','Allow','Zur Allowlist hinzufügen'],
+  ['allowlist-remove','Disallow','Aus der Allowlist entfernen']
+ ];
+ for(const [command,label,title] of choices){
+  const btn=document.createElement('button');
+  btn.type='button';
+  btn.textContent=label;
+  btn.title=title+' – '+name;
+  btn.setAttribute('aria-label',title+' für '+name);
+  btn.className=(command==='deop'||command==='allowlist-remove')?'secondary':'ghost';
+  btn.addEventListener('click',()=>playerCommand(command,name));
+  buttons.append(btn);
+ }
+ return buttons;
+}
 let onlinePlayersBusy=false;
 async function loadOnlinePlayers(){
  if(onlinePlayersBusy)return;
@@ -282,11 +302,7 @@ async function loadOnlinePlayers(){
     const name=document.createElement('strong');name.textContent=player;
     const meta=document.createElement('span');meta.className='muted tiny';meta.textContent='● Online';
     info.append(name,meta);
-    const buttons=document.createElement('div');buttons.className='player-entry-actions';
-    const kick=document.createElement('button');kick.className='secondary';kick.textContent='Kicken';kick.addEventListener('click',()=>playerCommand('kick',player));
-    const manage=document.createElement('button');manage.className='ghost';manage.textContent='Verwalten';
-    manage.addEventListener('click',()=>{$('playerName').value=player;$('playerName').focus()});
-    buttons.append(kick,manage);row.append(info,buttons);list.append(row);
+    row.append(info,inlinePlayerActions(player));list.append(row);
    }
   }
  }catch(e){
@@ -310,16 +326,7 @@ async function loadPlayers(){
    const meta=document.createElement('span');meta.className='muted tiny';
    meta.textContent=player.permission_known?({operator:'Operator',member:'Mitglied',visitor:'Besucher'}[player.permission]||'Status unbekannt'):'Berechtigungsstatus nicht zuordenbar (XUID fehlt oder keine Zuordnung)';
    info.append(name,meta);
-   const buttons=document.createElement('div');buttons.className='player-entry-actions';
-   const choices=[['kick','Kicken'],['allowlist-remove','Entfernen'],[player.operator?'deop':'op',player.operator?'OP entziehen':'OP erteilen']];
-   for(const [command,label] of choices){
-    const btn=document.createElement('button');
-    btn.className=command==='allowlist-remove'||command==='deop'?'secondary':'ghost';
-    btn.textContent=label;
-    btn.addEventListener('click',()=>playerCommand(command,player.name));
-    buttons.append(btn);
-   }
-   row.append(info,buttons);list.append(row);
+   row.append(info,inlinePlayerActions(player.name));list.append(row);
   }
  }catch(e){list.textContent='Spielerverwaltung nicht verfügbar: '+e.message;showNotice(e.message,true)}
 }
@@ -334,10 +341,10 @@ async function playerCommand(command,name){
  }catch(e){showNotice(e.message,true)}
 }
 $('playersReload').addEventListener('click',()=>{loadPlayers();loadOnlinePlayers()});
-$('playersList').addEventListener('click',loadOnlinePlayers);
-$('allowlistList').addEventListener('click',()=>{document.querySelector('[data-tab="console"]').click();consoleSend('allowlist-list')});
+
+
 $('consoleSayForm').addEventListener('submit',e=>{e.preventDefault();const msg=$('consoleMessage').value.trim();if(!msg)return;consoleSend('say',msg);$('consoleMessage').value=''});
-$('playerActionForm').addEventListener('submit',e=>{e.preventDefault();const command=$('playerAction').value,value=$('playerName').value.trim();playerCommand(command,value)});
+
 setInterval(()=>{if(!$('app').hidden&&!$('console').hidden)loadConsole()},5000);
 setInterval(()=>{if(!$('app').hidden&&!$('players').hidden)loadOnlinePlayers()},15000);
 
