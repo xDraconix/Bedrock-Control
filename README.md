@@ -4,9 +4,9 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.6.0** – Stable-Kandidat: signierte Updates für Weboberfläche und freigegebene Bedrock-Control-Systemkomponenten mit automatischer Wiederherstellung bei Fehlern.
+**2.7.0 – Entwicklungsstand: Spielerverwaltung.** Auf Basis von v2.6.0 Stable. Noch nicht für den Produktivserver freigegeben.
 
-> **Wichtig beim Upgrade von 2.5.5:** Einmalig `bash install.sh` aus dem verifizierten **v2.6.0-Release** ausführen, damit die neue Update-Engine und der Systemdatei-Planer installiert werden. Der alte v2.5.5-Web-Updater kann diese Root-Komponenten noch nicht installieren. Ab v2.6.0 kann der Ein-Klick-Updater die freigegebenen Systemkomponenten bei nachfolgenden signierten Releases aktualisieren. [Upgrade-Anleitung und Testnachweise](docs/releases/v2.6.0.md).
+Neu: Bedrock-Allowlist im Panel einsehen, Spieler hinzufügen/entfernen, `kick`, `op`, `deop` über die bestehende sichere Konsolenbrücke. XUID-basierter Operatorstatus, soweit eindeutig zuordenbar. Details und Einschränkungen: [Spielerverwaltung v2.7.0](docs/development/player-management-v2.7.0.md).
 
 ## Neue Funktion in 2.6.0
 
