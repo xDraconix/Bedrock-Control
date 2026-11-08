@@ -52,6 +52,28 @@ Die Einstellung für den Updatekanal wird unter `/etc/bedrock-control-pro/update
 
 GitHub-Releases: https://github.com/xDraconix/Bedrock-Control/releases
 
+## Ein-Befehl-Release auf dem vertrauenswürdigen Rechner
+
+Benötigt: Linux oder WSL, `git`, `openssl`, `unzip` und für die Veröffentlichung die [GitHub CLI](https://cli.github.com/) (`gh`). Einmalig `gh auth login` durchführen. Für die Veröffentlichung benötigt das angemeldete GitHub-Konto entsprechende Repository-Rechte.
+
+Der **private Ed25519-Schlüssel** bleibt lokal und wird ausschließlich zum Signieren benutzt. Das Skript lädt den aktuellen `main`-Commit, prüft das zugehörige öffentliche Schlüsselpaar, baut das ZIP, signiert das Manifest und überprüft das Ergebnis.
+
+Nur lokal vorbereiten:
+
+```bash
+bash release-tools/prepare-signed-release.sh /SICHERER-ORT/release-private.pem
+```
+
+Optional alles einschließlich GitHub-Release automatisch veröffentlichen:
+
+```bash
+bash release-tools/prepare-signed-release.sh /SICHERER-ORT/release-private.pem --publish
+```
+
+Die Veröffentlichung benötigt **eine ausdrückliche Eingabe des Versions-Tags** (beispielsweise `v2.5.5`). Wenn dieser Tag oder das Release bereits existiert, wird abgebrochen. Uploads ersetzen keine vorhandenen Dateien. Die drei Dateien werden unter `~/Bedrock-Control-Releases/vX.Y.Z/` abgelegt. Optional: `--output /ZIEL/VERZEICHNIS`.
+
+**Hinweis:** Der lokale Build erfordert keine Veröffentlichung. Der Modus `--publish` erstellt ein öffentliches **stabiles** Release (kein Pre-Release). Er sollte erst verwendet werden, nachdem der beabsichtigte Commit freigegeben und getestet wurde. Bei fehlgeschlagenem Upload bleiben die lokal signierten Dateien erhalten; Fehler sind vor einem erneuten Versuch auf GitHub zu prüfen.
+
 ## Release für Herausgeber erstellen
 
 Das Installationspaket wird aus einem **sauberen, geprüften Git-Commit** gebaut:
@@ -72,6 +94,6 @@ Genau drei Dateien als GitHub-Release-Assets veröffentlichen: ZIP, `.manifest`,
 
 ## Entwicklung und Dokumentation
 
-- [Freigabe und Testprotokoll](docs/releases/v2.5.4.md)
+- [Release Notes v2.5.5](docs/releases/v2.5.5.md)
 - [Entwicklungsnotizen zum Update-Manager](docs/development/panel-updater-v2.5.0.md)
 - Quellcode: https://github.com/xDraconix/Bedrock-Control
