@@ -276,7 +276,12 @@ function inlinePlayerActions(name){
   btn.textContent=label;
   btn.title=title+' – '+name;
   btn.setAttribute('aria-label',title+' für '+name);
-  btn.className=(command==='deop'||command==='allowlist-remove')?'secondary':'ghost';
+  btn.className={
+   op:'player-action player-action-op',
+   deop:'player-action player-action-deop',
+   'allowlist-add':'player-action player-action-allow',
+   'allowlist-remove':'player-action player-action-disallow'
+  }[command];
   btn.addEventListener('click',()=>playerCommand(command,name));
   buttons.append(btn);
  }
@@ -297,10 +302,10 @@ async function loadOnlinePlayers(){
    const p=document.createElement('p');p.className='muted';p.textContent='Derzeit keine Spieler online.';list.append(p);
   }else{
    for(const player of d.players){
-    const row=document.createElement('div');row.className='player-entry';
+    const row=document.createElement('div');row.className='player-entry player-entry-online';
     const info=document.createElement('div');info.className='player-entry-info';
-    const name=document.createElement('strong');name.textContent=player;
-    const meta=document.createElement('span');meta.className='muted tiny';meta.textContent='● Online';
+    const name=document.createElement('strong');name.className='player-name';name.textContent=player;
+    const meta=document.createElement('span');meta.className='player-status player-status-online';meta.textContent='● Online';
     info.append(name,meta);
     row.append(info,inlinePlayerActions(player));list.append(row);
    }
@@ -315,16 +320,18 @@ async function loadPlayers(){
  const list=$('managedPlayers');list.textContent='Lade Allowlist ...';
  try{
   const d=await api('players-state');
-  txt('allowlistState',d.allowlist_enabled===true?'Allowlist aktiv – nur eingetragene Gamertags können beitreten':d.allowlist_enabled===false?'Allowlist deaktiviert – Liste schränkt den Zugang derzeit nicht ein':'Allowlist-Einstellung unbekannt');
+  txt('allowlistState',d.allowlist_enabled===true?'● Allowlist aktiv – nur eingetragene Gamertags können beitreten':d.allowlist_enabled===false?'● Allowlist deaktiviert – aktuell keine Zugangsbeschränkung':'⚠ Allowlist-Einstellung unbekannt');
+  $('allowlistState').className='player-allowlist-state '+(d.allowlist_enabled===true?'player-allowlist-enabled':'player-allowlist-disabled');
   txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+' Online-Spieler werden separat automatisch abgefragt.');
   list.replaceChildren();
   if(!d.players?.length){const p=document.createElement('p');p.className='muted';p.textContent='Keine Allowlist-Einträge vorhanden.';list.append(p);return}
   for(const player of d.players){
-   const row=document.createElement('div');row.className='player-entry';
+   const row=document.createElement('div');row.className='player-entry player-entry-allowlist';
    const info=document.createElement('div');info.className='player-entry-info';
-   const name=document.createElement('strong');name.textContent=player.name;
-   const meta=document.createElement('span');meta.className='muted tiny';
-   meta.textContent=player.permission_known?({operator:'Operator',member:'Mitglied',visitor:'Besucher'}[player.permission]||'Status unbekannt'):'Berechtigungsstatus nicht zuordenbar (XUID fehlt oder keine Zuordnung)';
+   const name=document.createElement('strong');name.className='player-name';name.textContent=player.name;
+   const meta=document.createElement('span');
+   meta.className='player-status '+(player.permission_known?(player.operator?'player-status-operator':'player-status-member'):'player-status-unknown');
+   meta.textContent=player.permission_known?({operator:'★ Operator',member:'Mitglied',visitor:'Besucher'}[player.permission]||'Status unbekannt'):'⚠ Berechtigungsstatus nicht zuordenbar';
    info.append(name,meta);
    row.append(info,inlinePlayerActions(player.name));list.append(row);
   }
