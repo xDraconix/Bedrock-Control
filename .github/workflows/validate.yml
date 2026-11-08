@@ -32,6 +32,7 @@ jobs:
           from pathlib import Path
           files = [
               Path("system/usr-local-bin/bedrock-panel-apply-release"),
+              Path("system/usr-local-bin/bedrock-panel-system-plan"),
               Path("system/usr-local-bin/bedrock-panel-verify-release"),
               Path("system/usr-local-bin/bedrock-panel-recovery"),
               Path("system/usr-local-sbin/bedrock-panel-self-update-worker")
@@ -42,6 +43,14 @@ jobs:
           PY
       - name: Test read-only Bedrock world seed parser
         run: python3 tests/test_world_seed.py
+      - name: Test component update allowlist
+        run: python3 tests/test_system_update_plan.py
+      - name: Test atomic root component replacement
+        run: sudo python3 tests/test_system_component_install.py
+      - name: Test rollback after interrupted component update
+        run: sudo python3 tests/test_system_component_rollback.py
+      - name: Syntax-check manual signed E2E rollback harness (not executed in CI)
+        run: python3 -c "import ast,pathlib; ast.parse(pathlib.Path('tests/test_signed_update_rollback_e2e.py').read_text())"
       - name: Check public release verification key
         run: openssl pkey -pubin -in system/release/trusted-release-key.pem -noout
       - name: Check sudoers syntax
@@ -49,5 +58,5 @@ jobs:
       - name: Build and validate unsigned installer ZIP
         run: |
           bash release-tools/build-release.sh
-          unzip -tq dist/Bedrock-Control-PRO-v2.5.5-Release.zip
-          unzip -p dist/Bedrock-Control-PRO-v2.5.5-Release.zip bedrock-control-pro-2.5.5-installer/VERSION | grep -qx 2.5.5
+          unzip -tq dist/Bedrock-Control-PRO-v2.6.0-Release.zip
+          unzip -p dist/Bedrock-Control-PRO-v2.6.0-Release.zip bedrock-control-pro-2.6.0-installer/VERSION | grep -qx 2.6.0

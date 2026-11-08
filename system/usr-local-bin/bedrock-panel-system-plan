@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Read-only allowlist plan for signed Bedrock Control PRO system updates.
+
+Does not install or execute release files. Does not touch Minecraft paths.
+The caller must verify the signed archive before using extracted content.
+"""
+import json
+import os
+import subprocess
+import re
+import stat
+import sys
+from pathlib import Path
+
+ALLOWED_SBIN = frozenset({
+    'bedrock-addon-manager', 'bedrock-config-access',
+    'bedrock-console-manager', 'bedrock-nethernet-check',
+    'bedrock-panel-control', 'bedrock-panel-self-update-control',
+    'bedrock-panel-self-update-worker', 'bedrock-panel-service-worker',
+    'bedrock-panel-update-worker', 'bedrock-properties-manager',
+    'bedrock-service-configure', 'bedrock-setup-control',
+    'bedrock-setup-worker', 'bedrock-world-export-worker',
+    'bedrock-world-manager',
+})
+ALLOWED_BIN = frozenset({
+    'bedrock-panel-apply-release', 'bedrock-panel-recovery',
+    'bedrock-panel-update-test', 'bedrock-panel-verify-release',
+    'bedrock-panel-system-plan',
+})
+FIXED = {
+    'system/systemd/bedrock-panel-self-update.service':
+        ('/etc/systemd/system/bedrock-panel-self-update.service', 0o644),
+    'system/sudoers/bedrock-control-pro':
+        ('/etc/sudoers.d/bedrock-control-pro', 0o440),
+    'system/apache/bedrock-control-pro.conf':
+        ('/etc/apache2/sites-available/bedrock-control-pro.conf', 0o644),
+    'system/tmpfiles/bedrock-control-pro.conf':
+        ('/etc/tmpfiles.d/bedrock-control-pro.conf', 0o644),
+    'system/tmpfiles/bedrock-panel-jobs.conf':
+        ('/etc/tmpfiles.d/bedrock-panel-jobs.conf', 0o644),
+    'system/tmpfiles/bedrock-world-exports.conf':
+        ('/etc/tmpfiles.d/bedrock-world-exports.conf', 0o644),
+}
+REQUIRED = {
+    'system/usr-local-sbin/bedrock-world-manager',
+    'system/usr-local-sbin/bedrock-panel-self-update-worker',
+    'system/usr-local-bin/bedrock-panel-apply-release',
+    'system/usr-local-bin/bedrock-panel-recovery',
+    'system/usr-local-bin/bedrock-panel-verify-release',
+    'system/usr-local-bin/bedrock-panel-system-plan',
+    'system/systemd/bedrock-panel-self-update.service',
+    'system/sudoers/bedrock-control-pro',
+}
+PROTECTED_PREFIXES = (
+    '/home/mcserver/', '/etc/bedrock-control-pro/',
+    '/etc/systemd/system/mcbedrock.service',
+    '/home/mcserver/minecraft_bedrock/',
+)
+
+def plan(source):
+    root = Path(source)
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError('Ungültiges Installer-Verzeichnis')
+    system = root/'system'
+    if not system.is_dir() or system.is_symlink():
+        raise ValueError('Systemverzeichnis fehlt oder ist Symlink')
+    entries = []
+    for p in sorted(system.rglob('*')):
+        if p.is_symlink() or (not p.is_file() and not p.is_dir()):
+            raise ValueError('Symlink oder Sonderdatei im Systempaket: '+str(p))
+        if p.is_dir():
+            continue
+        rel = p.relative_to(root).as_posix()
+        name = p.name
+        if rel.startswith('system/usr-local-sbin/'):
+            if name not in ALLOWED_SBIN or rel!='system/usr-local-sbin/'+name:
+                raise ValueError('Nicht erlaubter ausführbarer System-Helper: '+rel)
+            target,mode = '/usr/local/sbin/'+name,0o755
+        elif rel.startswith('system/usr-local-bin/'):
+            if name not in ALLOWED_BIN or rel!='system/usr-local-bin/'+name:
+                raise ValueError('Nicht erlaubter System-Helper: '+rel)
+            target,mode = '/usr/local/bin/'+name,0o755
+        elif rel in FIXED:
+            target,mode = FIXED[rel]
+        elif rel=='system/php/99-bedrock-addon-upload.ini':
+            proc=subprocess.run(['/usr/bin/php','-r','echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;'],
+                                capture_output=True,text=True,timeout=10)
+            if proc.returncode!=0 or not re.fullmatch(r'\d+\.\d+',proc.stdout):
+                raise ValueError('PHP-Version für Apache-Konfiguration nicht ermittelbar')
+            target='/etc/php/'+proc.stdout+'/apache2/conf.d/99-bedrock-addon-upload.ini'
+            if not Path(target).parent.is_dir():
+                raise ValueError('Apache-PHP-Konfigurationsordner fehlt')
+            mode=0o644
+        else:
+            # Minecraft service, server scripts, PHP setup assets are not
+            # part of the safe online-update transaction. Manual install only.
+            continue
+        if any(target.startswith(prefix) for prefix in PROTECTED_PREFIXES):
+            raise ValueError('Minecraft- oder vertrauenswürdiger Schlüsselpfad geschützt')
+        if p.stat().st_size > 5*1024*1024:
+            raise ValueError('Systemdatei zu groß: '+rel)
+        dst = Path(target)
+        for ancestor in (dst,*dst.parents):
+            if ancestor.is_symlink():
+                raise ValueError('Symlink im Zielpfad: '+str(ancestor))
+        if dst.exists() and not dst.is_file():
+            raise ValueError('Ziel ist keine reguläre Datei: '+target)
+        entries.append({'source':rel,'target':target,'mode':format(mode,'04o'),
+                        'exists':dst.exists()})
+    seen={x['source'] for x in entries}
+    missing=REQUIRED-seen
+    if missing:
+        raise ValueError('Erforderliche Systemkomponenten fehlen: '+', '.join(sorted(missing)))
+    if len({x['target'] for x in entries})!=len(entries):
+        raise ValueError('Doppelte Installationsziele')
+    return {'schema':1,'mode':'plan-only','system_components':entries,
+            'minecraft_untouched':True,'files_count':len(entries)}
+
+def main():
+    if len(sys.argv)!=3 or sys.argv[1]!='plan':
+        raise ValueError('Aufruf: bedrock-panel-system-plan plan /pfad/zum/verifizierten/installer')
+    print(json.dumps(plan(sys.argv[2]),ensure_ascii=False,indent=2))
+
+if __name__=='__main__':
+    try:
+        main()
+    except (OSError,ValueError) as exc:
+        print('FEHLER: '+str(exc),file=sys.stderr)
+        sys.exit(1)

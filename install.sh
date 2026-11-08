@@ -161,6 +161,7 @@ install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-verify
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-recovery" /usr/local/bin/bedrock-panel-recovery
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-update-test" /usr/local/bin/bedrock-panel-update-test
 install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-apply-release" /usr/local/bin/bedrock-panel-apply-release
+install -m 0755 -o root -g root "$ROOT/system/usr-local-bin/bedrock-panel-system-plan" /usr/local/bin/bedrock-panel-system-plan
 # Dedicated root-only directory. The web server has no write permission here.
 # Updatekanal ist eine root-verwaltete Konfiguration und bleibt bei Upgrades erhalten.
 CHANNEL_CONFIG=/etc/bedrock-control-pro/update-channel
@@ -241,5 +242,5 @@ if [[ ! -s /opt/bedrock-control-pro/config/password.hash ]]; then
   echo 'Administrator-Passwort jetzt einrichten:'
   php /opt/bedrock-control-pro/set-password.php
 fi
-echo 'Installation abgeschlossen (v2.5.5): http://SERVER-IP:8088/'
+echo 'Installation abgeschlossen (v2.6.0): http://SERVER-IP:8088/'
 echo 'Bestehende Minecraft-Server wurden nicht neu gestartet oder überschrieben. Bei Neuinstallation: Webpanel öffnen und Setup-Assistent verwenden.'
