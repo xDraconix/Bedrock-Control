@@ -78,3 +78,10 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
 .world-seed-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
 .world-seed-row code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;user-select:all}
 .world-seed-row button{padding:4px 10px;font-size:.8rem}
+
+/* 2.7 player management */
+.player-entry{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:14px 8px;border-bottom:1px solid #34463a}
+.player-entry-info{display:flex;flex-direction:column;gap:5px;min-width:0;overflow-wrap:anywhere}
+.player-entry-actions{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+.player-entry-actions button{padding:8px 10px;font-size:12px}
+@media(max-width:700px){.player-entry{align-items:flex-start;flex-direction:column}.player-entry-actions{justify-content:flex-start}}
