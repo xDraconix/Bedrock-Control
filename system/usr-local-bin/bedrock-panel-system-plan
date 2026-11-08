@@ -15,6 +15,7 @@ from pathlib import Path
 ALLOWED_SBIN = frozenset({
     'bedrock-addon-manager', 'bedrock-config-access',
     'bedrock-console-manager', 'bedrock-nethernet-check',
+    'bedrock-monitor-manager',
     'bedrock-panel-control', 'bedrock-panel-self-update-control',
     'bedrock-panel-self-update-worker', 'bedrock-panel-service-worker',
     'bedrock-panel-update-worker', 'bedrock-properties-manager',
@@ -28,6 +29,10 @@ ALLOWED_BIN = frozenset({
     'bedrock-panel-system-plan',
 })
 FIXED = {
+    'system/systemd/bedrock-monitor.service':
+        ('/etc/systemd/system/bedrock-monitor.service', 0o644),
+    'system/systemd/bedrock-monitor.timer':
+        ('/etc/systemd/system/bedrock-monitor.timer', 0o644),
     'system/systemd/bedrock-panel-self-update.service':
         ('/etc/systemd/system/bedrock-panel-self-update.service', 0o644),
     'system/sudoers/bedrock-control-pro':
