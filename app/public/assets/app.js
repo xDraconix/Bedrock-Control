@@ -262,28 +262,39 @@ $('reloadConsole').addEventListener('click',loadConsole);
 $('consoleList').addEventListener('click',()=>consoleSend('list'));
 $('consoleDay').addEventListener('click',()=>consoleSend('day'));
 $('consoleNight').addEventListener('click',()=>consoleSend('night'));
-function inlinePlayerActions(name){
+function inlinePlayerActions(name,entry){
  const buttons=document.createElement('div');buttons.className='player-entry-actions';
- const choices=[
-  ['op','OP','Operatorrechte erteilen'],
-  ['deop','deOP','Operatorrechte entziehen'],
-  ['allowlist-add','Allow','Zur Allowlist hinzufügen'],
-  ['allowlist-remove','Disallow','Aus der Allowlist entfernen']
- ];
- for(const [command,label,title] of choices){
+ const addButton=(command,label,title,classes,pressed)=>{
   const btn=document.createElement('button');
   btn.type='button';
+  btn.className='player-action '+classes;
   btn.textContent=label;
   btn.title=title+' – '+name;
   btn.setAttribute('aria-label',title+' für '+name);
-  btn.className={
-   op:'player-action player-action-op',
-   deop:'player-action player-action-deop',
-   'allowlist-add':'player-action player-action-allow',
-   'allowlist-remove':'player-action player-action-disallow'
-  }[command];
+  if(pressed!==null)btn.setAttribute('aria-pressed',String(pressed));
   btn.addEventListener('click',()=>playerCommand(command,name));
   buttons.append(btn);
+ };
+ // No separate Bedrock "disallow list": Allow turns membership on/off.
+ const isAllowed=!!entry;
+ addButton(isAllowed?'allowlist-remove':'allowlist-add',
+           isAllowed?'✓ Allow':'Allow',
+           isAllowed?'Von der Allowlist entfernen':'Zur Allowlist hinzufügen',
+           'player-action-allow'+(isAllowed?' player-action-selected':''),
+           isAllowed);
+ // OP status is only known when the allowlist entry has a matching XUID
+ // in permissions.json. Never mark a player as non-operator on a guess.
+ if(entry?.permission_known){
+  const isOp=entry.permission==='operator';
+  addButton(isOp?'deop':'op',isOp?'✓ OP':'OP',
+            isOp?'Operatorrechte entziehen':'Operatorrechte erteilen',
+            'player-action-op'+(isOp?' player-action-selected':''),
+            isOp);
+ }else{
+  addButton('op','OP','Operatorrechte erteilen (aktueller Status unbekannt)',
+            'player-action-op',null);
+  addButton('deop','deOP','Operatorrechte entziehen (aktueller Status unbekannt)',
+            'player-action-deop',null);
  }
  return buttons;
 }
@@ -326,7 +337,7 @@ function renderOnlinePlayers(players){
   const info=document.createElement('div');info.className='player-entry-info';
   const name=document.createElement('strong');name.className='player-name';name.textContent=player;
   info.append(name,playerBadges(knownPlayerRoles.get(player.toLocaleLowerCase('de-DE')),true));
-  row.append(info,inlinePlayerActions(player));list.append(row);
+  row.append(info,inlinePlayerActions(player,knownPlayerRoles.get(player.toLocaleLowerCase('de-DE'))));list.append(row);
  }
 }
 
@@ -366,7 +377,7 @@ async function loadPlayers(){
    const info=document.createElement('div');info.className='player-entry-info';
    const name=document.createElement('strong');name.className='player-name';name.textContent=player.name;
    info.append(name,playerBadges(player,false));
-   row.append(info,inlinePlayerActions(player.name));list.append(row);
+   row.append(info,inlinePlayerActions(player.name,player));list.append(row);
   }
  }catch(e){knownPlayerRoles=new Map();if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);list.textContent='Spielerverwaltung nicht verfügbar: '+e.message;showNotice(e.message,true)}
 }
