@@ -85,7 +85,7 @@ def identity_cache(needed):
     Root-owned persistent cache is non-public and does not contain permission levels.
     Ambiguous identities are never attributed an OP status.
     """
-    if not needed:
+    if needed is not None and not needed:
         return {}, []
     CACHE_DIR.mkdir(mode=0o700, parents=False, exist_ok=True)
     st = CACHE_DIR.lstat()
@@ -109,8 +109,10 @@ def identity_cache(needed):
             for key, xuid in raw.items():
                 if (isinstance(key, str) and PLAYER_NAME.fullmatch(key)
                         and key.strip()==key and key==key.casefold()
-                        and isinstance(xuid, str) and xuid.isdigit() and len(xuid)<=24):
+                        and isinstance(xuid, str) and (xuid=='' or (xuid.isdigit() and len(xuid)<=24))):
                     cached[key]=xuid
+        if needed is None:
+            return {name:xuid for name,xuid in cached.items() if xuid}, []
         missing = {name.casefold() for name in needed if name.casefold() not in cached}
         warnings = []
         if missing:
@@ -122,7 +124,7 @@ def identity_cache(needed):
             # Never override a known cached name with a conflicting XUID.
             for name, xuid in observed.items():
                 if name in cached and cached[name] != xuid:
-                    cached.pop(name)
+                    cached[name]=''  # Permanent fail-closed marker until an admin clears the cache.
                     warnings.append('Widersprüchliche XUID-Zuordnung; Status bleibt unbekannt')
                     continue
                 if name not in cached and len(cached)<250:
@@ -142,7 +144,7 @@ def identity_cache(needed):
                 finally:
                     if os.path.exists(temp):
                         os.unlink(temp)
-        return {name:cached[name] for name in needed if name in cached}, warnings
+        return {name:cached[name] for name in needed if name in cached and cached[name]}, warnings
     finally:
         os.close(lockfd)
 
@@ -248,6 +250,22 @@ def player_state():
         del item['_xuid']
     if len(entries)>1:
         entries.sort(key=lambda x:x['name'].casefold())
+    # Cache carries identities only. The authoritative permission remains
+    # permissions.json, even for online players outside the allowlist.
+    identified_players = []
+    try:
+        identities, _ = identity_cache(None)
+        allowed_names = {item['name'].casefold() for item in entries}
+        for name, xuid in identities.items():
+            if name in allowed_names:
+                continue
+            permission = permission_levels.get(xuid)
+            identified_players.append({'name':name,
+                'operator':permission=='operator',
+                'permission_known':permission is not None,
+                'permission':permission, 'allowlisted':False})
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
     props = BASE/'server.properties'
     allowlist_enabled = None
     try:
@@ -257,7 +275,7 @@ def player_state():
                     allowlist_enabled=line.strip().split('=',1)[1].strip().lower()=='true'
     except OSError:
         pass
-    reply(ok=True, players=entries, allowlist_enabled=allowlist_enabled,
+    reply(ok=True, players=entries, identified_players=identified_players, allowlist_enabled=allowlist_enabled,
           warnings=problems, status='snapshot', online_names_available=False)
 
 
