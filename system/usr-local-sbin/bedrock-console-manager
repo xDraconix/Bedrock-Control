@@ -115,8 +115,9 @@ def main():
         reply(ok=True, message='Befehl an Minecraft-Konsole gesendet (Ausführung nicht bestätigt).')
     else: raise ValueError('Unbekannte Aktion')
 
-try:
-    main()
-except (ValueError, subprocess.TimeoutExpired, OSError) as e:
-    reply(error=str(e))
-    sys.exit(1)
+if __name__ == '__main__':
+    try:
+        main()
+    except (ValueError, subprocess.TimeoutExpired, OSError) as e:
+        reply(error=str(e))
+        sys.exit(1)
