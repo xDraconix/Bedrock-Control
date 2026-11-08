@@ -67,10 +67,10 @@ with tempfile.TemporaryDirectory() as tmp:
     mod.CGROUP_ROOT=pathlib.Path(tmp)
     group=mod.CGROUP_ROOT/'system.slice'/'mcbedrock.service'
     group.mkdir(parents=True)
-    (group/'cpu.stat').write_text('usage_usec 188000000\\nuser_usec 120000000\\n')
-    (group/'memory.current').write_text('734003200\\n')
+    (group/'cpu.stat').write_text('usage_usec 188000000\nuser_usec 120000000\n')
+    (group/'memory.current').write_text('734003200\n')
     with patch.object(mod,'command',return_value=Result(
-        'ActiveState=active\\nCPUUsageNSec=[not set]\\nMemoryCurrent=[not set]\\nControlGroup=/system.slice/mcbedrock.service\\n')):
+        'ActiveState=active\nCPUUsageNSec=[not set]\nMemoryCurrent=[not set]\nControlGroup=/system.slice/mcbedrock.service\n')):
         assert mod.service_snapshot()==(True,188000000000,734003200)
     assert mod.cgroup_value('/../../etc','cpu_ns') is None
     assert mod.cgroup_value('/wrong path','cpu_ns') is None
