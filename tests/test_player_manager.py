@@ -102,3 +102,45 @@ Player Two
 assert mod.parse_online_list(fresh)['players']==['F4U DraconiX','Player Two']
 assert mod.parse_online_list(existing)['response_id']!=mod.parse_online_list(fresh)['response_id']
 print('OK: live player list parser rejects malformed, partial or stale responses')
+
+
+# v2.7.1 regression: Bedrock permission records contain XUID and role only.
+# The identity name can be resolved from allowlist.json without querying SCREEN.
+with tempfile.TemporaryDirectory() as tmp:
+    mod.BASE=pathlib.Path(tmp)
+    permissions=[
+        {'permission':'operator','xuid':'2535419664549744'},
+        {'permission':'member','xuid':'2535414163148361'},
+        {'permission':'operator','xuid':'2535450289183308'},
+        {'permission':'operator','xuid':'2535411371068598'},
+        {'permission':'member','xuid':'2535460183415229'},
+    ]
+    (mod.BASE/'permissions.json').write_text(json.dumps(permissions),encoding='utf-8')
+    (mod.BASE/'server.properties').write_text('allow-list=false\\n',encoding='utf-8')
+    (mod.BASE/'allowlist.json').write_text('[]',encoding='utf-8')
+    with redirect_stdout(out:=io.StringIO()):
+        mod.player_state()
+    empty=json.loads(out.getvalue())
+    assert empty['players']==[], 'without name-to-XUID mapping, permissions must not be guessed'
+
+    entries=[
+        {'name':'F4U DraconiX','xuid':'2535419664549744'},
+        {'name':'Second Member','xuid':'2535414163148361'},
+        {'name':'No Permission','xuid':'99999999'},
+        {'name':'No Xuid'}
+    ]
+    (mod.BASE/'allowlist.json').write_text(json.dumps(entries),encoding='utf-8')
+    with redirect_stdout(out:=io.StringIO()):
+        mod.player_state()
+    data=json.loads(out.getvalue())
+    by_name={p['name']:p for p in data['players']}
+    assert by_name['F4U DraconiX']['permission']=='operator'
+    assert by_name['F4U DraconiX']['operator'] is True
+    assert by_name['F4U DraconiX']['permission_known'] is True
+    assert by_name['Second Member']['permission']=='member'
+    assert by_name['Second Member']['operator'] is False
+    assert by_name['No Permission']['permission_known'] is False
+    assert by_name['No Xuid']['permission_known'] is False
+    assert all('xuid' not in p and '_xuid' not in p for p in data['players'])
+    assert data['allowlist_enabled'] is False, 'a saved allowlist can exist when enforcement is off'
+print('OK: actual Bedrock XUID-only permissions and name-to-XUID allowlist mapping')
