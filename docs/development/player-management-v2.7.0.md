@@ -37,3 +37,11 @@ Nach erfolgreichem Test der automatischen Online-Abfrage auf `Minecraft-Test-2` 
 Das Spielermanagement zeigt nun separate Farbetiketten neben Spielernamen: `Online` (Grün), `Allowlist` (Türkis), `OP` (Gold), `Mitglied/Besucher` (Neutral) oder `Rechte unbekannt` (Bernstein). Bei online sichtbaren Spielern ohne Allowlist-Eintrag wird `Nicht auf Allowlist` angezeigt. **Diese Kennzeichnung bedeutet nur, dass kein Eintrag in `allowlist.json` vorhanden ist, nicht dass dieser Spieler vom Server ausgeschlossen ist.** Die Einstellung `allow-list` wird weiterhin gesondert angezeigt. Fehlende XUID-Zuordnungen führen zu `Rechte unbekannt`, niemals zu einer erfundenen Berechtigung.
 
 Die zuvor in der Spielerverwaltung bewährte Typografie, stärkere Kontraste und leicht abgesetzte Listenkarten werden über gemeinsame CSS-Selektoren auch auf Welten, Add-ons, Backups, Einstellungen und weitere Panel-Tabs angewendet. Keine sonstigen Endpunkte oder Minecraft-Dateien werden dafür geändert. Vor dem Stable-Merge alle Seiten auf Desktop und Mobilgerät kontrollieren, insbesondere dynamisch erzeugte Listen und Formularfelder.
+
+## Reversible Rechte-Schalter
+
+OP und Allowlist werden in der Spieleransicht als **zustandsabhängige Umschalter** dargestellt. Bei bekannter Operatorberechtigung steht `✓ OP`; ein Klick sendet `deop`. Ohne Operatorberechtigung steht `OP`; ein Klick sendet `op`. Bei fehlender XUID-Zuordnung wird keine falsche Statusanzeige erzeugt: getrennte `OP`-/`deOP`-Aktionen bleiben zugänglich und besitzen ausdrücklich kein Häkchen. Für den Allowlist-Eintrag steht `✓ Allow`; ein erneuter Klick sendet `allowlist remove`, danach verschwindet der Spieler aus der Allowlist-Liste. Ohne Eintrag sendet `Allow` den Befehl `allowlist add`.
+
+**Wichtig:** Vanilla Bedrock verfügt über keine separate Disallow-/Denylist in diesem Panel. `Disallow` bedeutet hier lediglich *aus der Allowlist entfernen*. Wenn `allow-list=false` ist, wird dadurch der Zugang nicht gesperrt. Die UI erfindet darum keinen aktiven Disallow-Status.
+
+Jede Aktion erfordert die bestehende Bestätigung. Der Konsolen-Bridge-Erfolg bestätigt nur die Befehlsübergabe, nicht die Ausführung. Die Umschalter zeigen die aktuelle, erneut aus Dateien gelesene Information, ohne eine optimistische Statusänderung vorzutäuschen.
