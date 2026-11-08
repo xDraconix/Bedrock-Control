@@ -46,7 +46,7 @@ jobs:
       - name: Test player roster and console command validation
         run: python3 tests/test_player_manager.py
       - name: Test historical monitoring storage and CPU deltas
-        run: python3 tests/test_monitoring.py
+        run: sudo python3 tests/test_monitoring.py
       - name: Test player UI toggle behavior
         run: node tests/test_player_ui.cjs
       - name: Test read-only Bedrock world seed parser
