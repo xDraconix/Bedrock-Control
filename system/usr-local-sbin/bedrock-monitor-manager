@@ -132,7 +132,8 @@ def history(db, window, now):
     if window not in WINDOWS:
         raise ValueError('Ungültiges Zeitfenster')
     cutoff = now - WINDOWS[window]
-    # Keep response bounded while preserving minute-level resolution for 1h/6h.
+    # Fixed time buckets retain gaps if the collector was temporarily stopped.
+    # Even a 30-day response is bounded to at most 450 chart points.
     bucket = max(60, (WINDOWS[window] + 359) // 360)
     rows = db.execute(
         'SELECT (ts / ?) * ? AS bucket,'
@@ -140,13 +141,19 @@ def history(db, window, now):
         ' FROM samples WHERE ts>=? AND ts<=?'
         ' GROUP BY bucket ORDER BY bucket ASC LIMIT 450',
         (bucket,bucket,cutoff,now)).fetchall()
-    points = [{'ts':ts,'cpu_pct':round(cpu,2) if cpu is not None else None,
-               'ram_bytes':round(ram) if ram is not None else None,
-               'players':round(players,2) if players is not None else None,
-               'online':bool(online),'samples':count}
-              for ts,cpu,ram,players,online,count in rows]
+    known = {ts:{'ts':ts,'cpu_pct':round(cpu,2) if cpu is not None else None,
+                 'ram_bytes':round(ram) if ram is not None else None,
+                 'players':round(players,2) if players is not None else None,
+                 'online':bool(online),'samples':count}
+             for ts,cpu,ram,players,online,count in rows}
+    start = (cutoff // bucket) * bucket
+    end = (now // bucket) * bucket
+    points = [known.get(ts, {'ts':ts,'cpu_pct':None,'ram_bytes':None,
+                            'players':None,'online':None,'samples':0})
+              for ts in range(start,end+1,bucket)]
     latest = db.execute('SELECT ts,online,cpu_pct,ram_bytes,players FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
     return {'ok':True,'window':window,'bucket_seconds':bucket,'points':points,
+            'samples_count':sum(p['samples'] for p in points),
             'latest':dict(zip(('ts','online','cpu_pct','ram_bytes','players'),latest)) if latest else None,
             'retention_days':30,'interval_seconds':60}
 
