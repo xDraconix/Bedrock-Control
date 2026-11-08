@@ -17,19 +17,22 @@ with tempfile.TemporaryDirectory() as tmp:
     (mod.BASE/'allowlist.json').write_text(json.dumps([
         {'name':'Alex Builder','xuid':'12345','ignoresPlayerLimit':False},
         {'name':'No Xuid'},
+        {'name':'Visitor','xuid':'55555'},
         {'name':'Invalid"Name','xuid':'99'},
     ]),encoding='utf-8')
     (mod.BASE/'permissions.json').write_text(json.dumps([
-        {'xuid':'12345','permission':'operator'}]),encoding='utf-8')
+        {'xuid':'12345','permission':'operator'},
+        {'xuid':'55555','permission':'visitor'}]),encoding='utf-8')
     (mod.BASE/'server.properties').write_text('server-name=Foo\nallow-list=true\n')
     out=io.StringIO()
     with redirect_stdout(out):
         mod.player_state()
     data=json.loads(out.getvalue())
     assert data['allowlist_enabled'] is True
-    assert len(data['players'])==2
+    assert len(data['players'])==3
     assert next(x for x in data['players'] if x['name']=='Alex Builder')['operator'] is True
     assert next(x for x in data['players'] if x['name']=='No Xuid')['permission_known'] is False
+    assert next(x for x in data['players'] if x['name']=='Visitor')['permission']=='visitor'
     assert all('xuid' not in x for x in data['players'])
     (mod.BASE/'allowlist.json').unlink()
     (mod.BASE/'allowlist.json').symlink_to('/etc/passwd')
