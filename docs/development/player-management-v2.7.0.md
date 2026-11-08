@@ -1,0 +1,47 @@
+# Bedrock Control PRO v2.7.0 – Spielerverwaltung (Entwicklung)
+
+## Funktionen (erste Ausbaustufe)
+
+- Allowlist-Einträge aus `allowlist.json` werden ausschließlich lesend angezeigt, einschließlich Warnhinweis, wenn `allow-list=false` in `server.properties` gesetzt ist.
+- Soweit Allowlist und `permissions.json` dieselbe XUID enthalten, wird der Operatorstatus zugeordnet. Bei fehlender XUID erscheint ausdrücklich „Operatorstatus nicht zuordenbar“ statt eines falschen Status.
+- Spieler hinzufügen/entfernen über offizielle Bedrock-Konsolenbefehle `allowlist add` und `allowlist remove`.
+- Operatorrechte über `op` und `deop` setzen bzw. entfernen, Spieler über `kick` aus der Sitzung entfernen.
+- Listenausgaben über bestehende GNU-SCREEN-Konsole: `list` und `allowlist list`.
+- Bestätigungsdialog für administrative Aktionen und reine Zeichenvalidierung für Gamertags gegen Zeilenumbrüche, Anführungszeichen und Befehlsinjektion.
+
+## Einschränkungen
+
+- Online-Spielernamen werden alle 15 Sekunden über eine **frische** `list`-Antwort aus GNU SCREEN abgefragt; bei Timeout oder unvollständiger Antwort zeigt die Oberfläche keinen veralteten Stand. Die Spielerzahl auf dem Dashboard stammt weiterhin von NetherNet.
+- Die Abfrage nutzt die vorhandene Konsole, benötigt weder neue Add-ons noch einen Neustart. GNU SCREEN liefert auf dem Testserver pro Name eine eigene Zeile nach `There are N/M players online:`. Bei Formatänderungen der Bedrock-Version kann die Erkennung einen Fehler statt falscher Namen anzeigen.
+- Nach einem Konsolenbefehl bestätigt das Panel nur die Übergabe an GNU SCREEN, nicht die erfolgreiche Anwendung durch Minecraft. Bei Änderungen die Live-Konsole kontrollieren.
+- `permissions.json` enthält XUIDs ohne zwingende Zuordnung zum Gamertag. Ein Spieler ohne XUID kann daher durchaus Operator sein, obwohl dies die Ansicht nicht bestimmen kann.
+- Die Allowlist wird erst dann zur Zugangssperre, wenn `allow-list=true` aktiv ist. Für eine Änderung dieser Servereigenschaft können weitere Schritte nötig sein.
+- Vanilla Bedrock Dedicated Server unterstützt die aus Java bekannten Befehle `ban` und `pardon` nicht als verlässliche serverseitige Sperre. Die alte Auswahl wird in dieser Ansicht durch Allowlist und Operatorfunktionen ersetzt.
+- Keine direkten Änderungen an `allowlist.json` oder `permissions.json`; Minecraft verwaltet seine eigenen Dateien selbst.
+
+## Test / Release
+
+- Branch: `feature/player-management-v2.7.0`
+- APIs: `GET /?api=players-state` (Allowlist und Rollen), `GET /?api=players-online` (frische Bedrock-Konsolenantwort), bestehende authentifizierte/CSRF-geschützte `console-send`-API für Aktionen.
+- Root-Konsole: `/usr/local/sbin/bedrock-console-manager players` sowie `send allowlist-add|allowlist-remove|op|deop|kick NAME`.
+- Test: `python3 tests/test_player_manager.py`
+- Das v2.6.0-Update-System kann den geänderten, signierten Root-Helper künftig selbst aktualisieren; für Tests auf bestehendem v2.6.0-Container ist `bash install.sh` aus dem Entwicklungsbranch möglich.
+- **Nicht auf Produktion ausrollen**, bevor die Testinstanz die Bedienung mit echten Gamertags und Rollenzuordnung bestätigt.
+
+## Bedienung (vereinfachte Spieler-Karten)
+
+Nach erfolgreichem Test der automatischen Online-Abfrage auf `Minecraft-Test-2` wurde die Dropdown-Eingabe entfernt. Jede Online-Spielerkarte sowie jeder Allowlist-Eintrag enthält nun direkt die vier Schaltflächen **OP**, **deOP**, **Allow**, **Disallow**. Damit können bereits sichtbare Namen ohne erneute Eingabe verwaltet werden. Jede Aktion erfordert weiter eine Bestätigung; das Panel bestätigt die Übergabe an SCREEN, **nicht** die tatsächliche Anwendung des Befehls durch Bedrock. Beide Rechteknöpfe bleiben auch dann verfügbar, wenn der Status wegen fehlender XUID nicht eindeutig zugeordnet werden kann. Das Kommando `kick` ist weiterhin über die bestehende, abgesicherte Konsolenbrücke möglich, wird in dieser vereinfachten Ansicht aber nicht angeboten.
+
+## Einheitliches Design und Status-Badges
+
+Das Spielermanagement zeigt nun separate Farbetiketten neben Spielernamen: `Online` (Grün), `Allowlist` (Türkis), `OP` (Gold), `Mitglied/Besucher` (Neutral) oder `Rechte unbekannt` (Bernstein). Bei online sichtbaren Spielern ohne Allowlist-Eintrag wird `Nicht auf Allowlist` angezeigt. **Diese Kennzeichnung bedeutet nur, dass kein Eintrag in `allowlist.json` vorhanden ist, nicht dass dieser Spieler vom Server ausgeschlossen ist.** Die Einstellung `allow-list` wird weiterhin gesondert angezeigt. Fehlende XUID-Zuordnungen führen zu `Rechte unbekannt`, niemals zu einer erfundenen Berechtigung.
+
+Die zuvor in der Spielerverwaltung bewährte Typografie, stärkere Kontraste und leicht abgesetzte Listenkarten werden über gemeinsame CSS-Selektoren auch auf Welten, Add-ons, Backups, Einstellungen und weitere Panel-Tabs angewendet. Keine sonstigen Endpunkte oder Minecraft-Dateien werden dafür geändert. Vor dem Stable-Merge alle Seiten auf Desktop und Mobilgerät kontrollieren, insbesondere dynamisch erzeugte Listen und Formularfelder.
+
+## Reversible Rechte-Schalter
+
+OP und Allowlist werden in der Spieleransicht als **zustandsabhängige Umschalter** dargestellt. Bei bekannter Operatorberechtigung steht `✓ OP`; ein Klick sendet `deop`. Ohne Operatorberechtigung steht `OP`; ein Klick sendet `op`. Bei fehlender XUID-Zuordnung wird keine falsche Statusanzeige erzeugt: getrennte `OP`-/`deOP`-Aktionen bleiben zugänglich und besitzen ausdrücklich kein Häkchen. Für den Allowlist-Eintrag steht `✓ Allow`; ein erneuter Klick sendet `allowlist remove`, danach verschwindet der Spieler aus der Allowlist-Liste. Ohne Eintrag sendet `Allow` den Befehl `allowlist add`.
+
+**Wichtig:** Vanilla Bedrock verfügt über keine separate Disallow-/Denylist in diesem Panel. `Disallow` bedeutet hier lediglich *aus der Allowlist entfernen*. Wenn `allow-list=false` ist, wird dadurch der Zugang nicht gesperrt. Die UI erfindet darum keinen aktiven Disallow-Status.
+
+Jede Aktion erfordert die bestehende Bestätigung. Der Konsolen-Bridge-Erfolg bestätigt nur die Befehlsübergabe, nicht die Ausführung. Die Umschalter zeigen die aktuelle, erneut aus Dateien gelesene Information, ohne eine optimistische Statusänderung vorzutäuschen.

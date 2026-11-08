@@ -78,3 +78,171 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
 .world-seed-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
 .world-seed-row code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;user-select:all}
 .world-seed-row button{padding:4px 10px;font-size:.8rem}
+
+/* v2.7: improved visual hierarchy — strictly scoped to Spielerverwaltung */
+#players .card>h2{color:#f5ffef;font-size:1.25rem}
+#players .card>h3{
+ color:#f1ffe5;font-size:1.07rem;font-weight:800;
+ margin:26px 0 12px;padding-left:12px;border-left:3px solid #a2db74;
+ letter-spacing:.01em
+}
+#players .card>p.muted,#players #playersWarning{
+ color:#a8bbab;font-size:.86rem;line-height:1.65
+}
+#players #onlinePlayersState{
+ color:#c5e8c0;font-weight:650;font-size:.9rem;
+ margin:8px 0 14px
+}
+#players #onlinePlayersList,#players #managedPlayers{
+ display:grid;gap:10px;margin-top:12px
+}
+#players .player-entry{
+ display:flex;align-items:center;justify-content:space-between;
+ gap:18px;padding:17px 19px;border:1px solid #425b44;
+ border-radius:9px;background:linear-gradient(100deg,#14251a,#18271e);
+ box-shadow:inset 3px 0 0 #647e58,0 3px 10px rgba(0,0,0,.12);
+ min-width:0;transition:border-color .15s,background .15s
+}
+#players .player-entry-online{
+ background:linear-gradient(100deg,#15301f,#1a2b20);
+ border-color:#4c7551;box-shadow:inset 3px 0 0 #8ada81,0 3px 12px rgba(0,0,0,.12)
+}
+#players .player-entry:hover{border-color:#89af77}
+#players .player-entry-info{display:flex;flex-direction:column;gap:7px;min-width:0;overflow-wrap:anywhere}
+#players .player-name{font-size:1.1rem;font-weight:800;letter-spacing:.01em;color:#f6fff0;line-height:1.3}
+#players .player-status{font-size:.78rem;font-weight:680;line-height:1.5}
+#players .player-status-online{color:#95f0a3}
+#players .player-status-operator{color:#ffe09a}
+#players .player-status-member{color:#b3d6d1}
+#players .player-status-unknown{color:#f2c07b}
+#players .player-entry-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
+#players .player-action{
+ padding:9px 12px;min-width:65px;border:1px solid transparent;
+ border-radius:7px;font-size:.8rem;font-weight:800;
+ line-height:1.2;white-space:nowrap;box-shadow:none
+}
+#players .player-action-op{background:#4a4024;border-color:#8b7540;color:#ffe5a4}
+#players .player-action-deop{background:#303b3a;border-color:#586a65;color:#e0e9e1}
+#players .player-action-allow{background:#214d31;border-color:#487f55;color:#befbc3}
+#players .player-action-disallow{background:#512f32;border-color:#815052;color:#ffd0cf}
+#players .player-action:hover:not(:disabled){filter:brightness(1.2)}
+#players .player-action:focus-visible{outline:2px solid #e1f6aa;outline-offset:3px}
+#players .player-allowlist-state{
+ padding:11px 14px;border:1px solid #526249;border-radius:6px;
+ background:#1f2c20;font-size:.85rem;font-weight:700
+}
+#players .player-allowlist-enabled{color:#aaf3b8;border-color:#487752;background:#193321}
+#players .player-allowlist-disabled{color:#f0cd92;border-color:#786143;background:#302a1e}
+@media(max-width:760px){
+ #players .player-entry{align-items:flex-start;flex-direction:column;padding:15px;gap:14px}
+ #players .player-entry-actions{justify-content:flex-start;width:100%}
+ #players .player-action{flex:1 1 75px}
+}
+
+/* v2.7 – permission chips, consistent cross-page hierarchy */
+/* Shared surfaces and typography: page styles apply to all tabs without changing controls. */
+.tab .card>h2{
+ color:#f6fff0;
+ font-size:1.24rem;
+ line-height:1.35;
+ font-weight:800;
+}
+.tab .card>h3{
+ color:#edfbe8;
+ font-size:1.07rem;
+ line-height:1.4;
+ font-weight:800;
+ padding-left:12px;
+ border-left:3px solid #93c96d;
+ margin:26px 0 14px;
+}
+.tab .card>p.muted,.tab .card>.muted{
+ color:#a8bbab;
+ line-height:1.65;
+}
+.tab .card{
+ border-color:#4b6248;
+}
+.tab .card .addon-row,
+.tab .card .backuplist>div:not(.player-entry){
+ border:1px solid #405b44;
+ border-left:3px solid #78995b;
+ background:linear-gradient(110deg,#14251a,#1a2a20);
+ border-radius:8px;
+ padding:14px 16px;
+ margin-bottom:10px;
+ min-width:0;
+}
+.tab .card .addon-row:hover,
+.tab .card .backuplist>div:not(.player-entry):hover{
+ border-color:#779e6e;
+}
+.tab .card .addon-row b,
+.tab .card .addon-row strong,
+.tab .card .backuplist>div:not(.player-entry)>span:first-child{
+ color:#f6fff0;
+ font-weight:760;
+}
+.tab .card .addon-row .muted{
+ color:#acbfad;
+}
+.tab .card label:not(.property-field label){
+ color:#d4e4d0;
+}
+.tab .card button:focus-visible,
+.tab .card input:focus-visible,
+.tab .card select:focus-visible{
+ outline:2px solid #bceb93;
+ outline-offset:3px;
+}
+#players .player-badges{
+ display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;
+}
+#players .player-badge{
+ display:inline-flex;align-items:center;
+ border:1px solid transparent;border-radius:5px;
+ padding:4px 8px;
+ font-size:.72rem;font-weight:760;
+ line-height:1.4;letter-spacing:.02em;
+}
+#players .player-badge-online{
+ background:#1b4730;border-color:#417b4e;color:#b5ffc1;
+}
+#players .player-badge-allowed{
+ background:#1d4e48;border-color:#3d7f71;color:#c1fff0;
+}
+#players .player-badge-operator{
+ background:#514222;border-color:#988044;color:#ffe6a3;
+}
+#players .player-badge-member{
+ background:#303d39;border-color:#566e66;color:#d6e6df;
+}
+#players .player-badge-unknown{
+ background:#443821;border-color:#897042;color:#f7d197;
+}
+#players .player-badge-not-allowed{
+ background:#4c2d30;border-color:#895156;color:#ffd2d0;
+}
+@media(max-width:760px){
+ .tab .card .addon-row,
+ .tab .card .backuplist>div:not(.player-entry){
+  padding:12px;
+ }
+}
+
+/* v2.7 permission toggles: checked state has distinct outline and check icon in label */
+#players .player-action[aria-pressed="true"]{
+ border-width:2px;
+ box-shadow:0 0 0 1px rgba(222,246,193,.28),inset 0 0 0 1px rgba(255,255,255,.08);
+ filter:brightness(1.15);
+}
+#players .player-action[aria-pressed="false"]{
+ opacity:.83;
+}
+#players .player-action[aria-pressed="false"]:hover{
+ opacity:1;
+}
+#players .player-action[aria-pressed="true"]:focus-visible{
+ outline:3px solid #e1f6aa;
+ outline-offset:3px;
+}
