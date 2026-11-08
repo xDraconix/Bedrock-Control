@@ -276,7 +276,7 @@ function inlinePlayerActions(name,entry){
   buttons.append(btn);
  };
  // No separate Bedrock "disallow list": Allow turns membership on/off.
- const isAllowed=!!entry;
+ const isAllowed=!!entry && entry.allowlisted!==false;
  addButton(isAllowed?'allowlist-remove':'allowlist-add',
            isAllowed?'✓ Allow':'Allow',
            isAllowed?'Von der Allowlist entfernen':'Zur Allowlist hinzufügen',
@@ -311,7 +311,8 @@ function playerBadges(entry,isOnline){
  };
  if(isOnline)badge('● Online','player-badge-online');
  if(entry){
-  badge('✓ Allowlist','player-badge-allowed');
+  if(entry.allowlisted===false)badge('Nicht auf Allowlist','player-badge-not-allowed');
+  else badge('✓ Allowlist','player-badge-allowed');
   if(entry.permission_known){
    const role=entry.permission;
    badge(role==='operator'?'★ OP':role==='visitor'?'Besucher':'Mitglied',
@@ -350,9 +351,12 @@ async function loadOnlinePlayers(){
   const d=await api('players-online');
   if(!Array.isArray(d.players)||!Number.isInteger(d.count)||d.count!==d.players.length)throw Error('Unvollständige Serverantwort');
   if(d.players.some(n=>typeof n!=='string'))throw Error('Ungültige Spielernamen');
+  const changed=lastOnlineRoster===null || d.players.length!==lastOnlineRoster.length ||
+   d.players.some((name,i)=>name!==lastOnlineRoster[i]);
   lastOnlineRoster=d.players.slice();
   state.textContent=d.count+' von '+d.max_players+' Spielern online · frisch über die Konsole abgefragt';
   renderOnlinePlayers(lastOnlineRoster);
+  if(changed)loadPlayers();
  }catch(e){
   lastOnlineRoster=null;
   list.replaceChildren();
@@ -369,7 +373,9 @@ async function loadPlayers(){
   txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+' Online-Spieler werden separat automatisch abgefragt.');
   list.replaceChildren();
   if(!Array.isArray(d.players))throw Error('Ungültige Allowlist-Antwort');
-  knownPlayerRoles=new Map(d.players.map(player=>[player.name.toLocaleLowerCase('de-DE'),player]));
+  const known=(Array.isArray(d.identified_players)?d.identified_players:[])
+   .concat(d.players);
+  knownPlayerRoles=new Map(known.map(player=>[player.name.toLocaleLowerCase('de-DE'),player]));
   if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);
   if(!d.players.length){const p=document.createElement('p');p.className='muted';p.textContent='Keine Allowlist-Einträge vorhanden.';list.append(p);return}
   for(const player of d.players){
