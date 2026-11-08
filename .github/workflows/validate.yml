@@ -45,6 +45,8 @@ jobs:
         run: python3 tests/test_world_seed.py
       - name: Test component update allowlist
         run: python3 tests/test_system_update_plan.py
+      - name: Test atomic root component replacement
+        run: sudo python3 tests/test_system_component_install.py
       - name: Check public release verification key
         run: openssl pkey -pubin -in system/release/trusted-release-key.pem -noout
       - name: Check sudoers syntax
