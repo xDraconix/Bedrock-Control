@@ -4,9 +4,13 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.7.0 – Spielerverwaltung und einheitlicheres Panel-Design.** Die offizielle Veröffentlichung erfolgt nach der signierten Release-Freigabe.
+**2.7.1 – Teststand: XUID-Zuordnung von Allowlist und Operatorrechten.** Nur im Entwicklungszweig; v2.7.0 ist die veröffentlichte stabile Version.
 
 Neu: Online-Spielernamen über die Bedrock-Konsole automatisch anzeigen; Allowlist und Operatorrechte über Häkchen-Schalter ändern; XUID-basierter Operatorstatus, soweit eindeutig zuordenbar. Verbesserte visuelle Hierarchie auf den Verwaltungsseiten. Eine gesonderte Bedrock-Blockliste gibt es nicht. Details: [v2.7.0 Release Notes](docs/releases/v2.7.0.md) und [Entwicklungsdokumentation](docs/development/player-management-v2.7.0.md).
+
+## Testumfang für 2.7.1
+
+Die vorhandene `allowlist.json`-zu-`permissions.json`-Verknüpfung über die XUID wird mit realitätsnahen Bedrock-Daten geprüft. Ohne Allowlist-Eintrag können Online-Spielernamen nicht allein durch die namenlose `permissions.json` zugeordnet werden. Das Panel kennzeichnet diesen Fall ausdrücklich; eine zusätzliche Auswertung der SCREEN-Verbindungslogs ist nicht geplant.
 
 ## Neue Funktion in 2.6.0
 
