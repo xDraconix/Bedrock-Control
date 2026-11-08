@@ -27,3 +27,7 @@
 - Test: `python3 tests/test_player_manager.py`
 - Das v2.6.0-Update-System kann den geänderten, signierten Root-Helper künftig selbst aktualisieren; für Tests auf bestehendem v2.6.0-Container ist `bash install.sh` aus dem Entwicklungsbranch möglich.
 - **Nicht auf Produktion ausrollen**, bevor die Testinstanz die Bedienung mit echten Gamertags und Rollenzuordnung bestätigt.
+
+## Bedienung (vereinfachte Spieler-Karten)
+
+Nach erfolgreichem Test der automatischen Online-Abfrage auf `Minecraft-Test-2` wurde die Dropdown-Eingabe entfernt. Jede Online-Spielerkarte sowie jeder Allowlist-Eintrag enthält nun direkt die vier Schaltflächen **OP**, **deOP**, **Allow**, **Disallow**. Damit können bereits sichtbare Namen ohne erneute Eingabe verwaltet werden. Jede Aktion erfordert weiter eine Bestätigung; das Panel bestätigt die Übergabe an SCREEN, **nicht** die tatsächliche Anwendung des Befehls durch Bedrock. Beide Rechteknöpfe bleiben auch dann verfügbar, wenn der Status wegen fehlender XUID nicht eindeutig zugeordnet werden kann. Das Kommando `kick` ist weiterhin über die bestehende, abgesicherte Konsolenbrücke möglich, wird in dieser vereinfachten Ansicht aber nicht angeboten.
