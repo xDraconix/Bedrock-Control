@@ -223,7 +223,7 @@ $('panelStartUpdate').addEventListener('click',async()=>{
 });
 $('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
 $('panelCheckReleases').addEventListener('click',loadPanelRelease);
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='players'){status();loadPlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
 async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}
@@ -262,12 +262,45 @@ $('reloadConsole').addEventListener('click',loadConsole);
 $('consoleList').addEventListener('click',()=>consoleSend('list'));
 $('consoleDay').addEventListener('click',()=>consoleSend('day'));
 $('consoleNight').addEventListener('click',()=>consoleSend('night'));
+let onlinePlayersBusy=false;
+async function loadOnlinePlayers(){
+ if(onlinePlayersBusy)return;
+ onlinePlayersBusy=true;
+ const state=$('onlinePlayersState'),list=$('onlinePlayersList');
+ state.textContent='Aktuelle Spieler werden über Minecraft abgefragt ...';
+ try{
+  const d=await api('players-online');
+  if(!Array.isArray(d.players)||!Number.isInteger(d.count)||d.count!==d.players.length)throw Error('Unvollständige Serverantwort');
+  list.replaceChildren();
+  state.textContent=d.count+' von '+d.max_players+' Spielern online · frisch über die Konsole abgefragt';
+  if(!d.players.length){
+   const p=document.createElement('p');p.className='muted';p.textContent='Derzeit keine Spieler online.';list.append(p);
+  }else{
+   for(const player of d.players){
+    const row=document.createElement('div');row.className='player-entry';
+    const info=document.createElement('div');info.className='player-entry-info';
+    const name=document.createElement('strong');name.textContent=player;
+    const meta=document.createElement('span');meta.className='muted tiny';meta.textContent='● Online';
+    info.append(name,meta);
+    const buttons=document.createElement('div');buttons.className='player-entry-actions';
+    const kick=document.createElement('button');kick.className='secondary';kick.textContent='Kicken';kick.addEventListener('click',()=>playerCommand('kick',player));
+    const manage=document.createElement('button');manage.className='ghost';manage.textContent='Verwalten';
+    manage.addEventListener('click',()=>{$('playerName').value=player;$('playerName').focus()});
+    buttons.append(kick,manage);row.append(info,buttons);list.append(row);
+   }
+  }
+ }catch(e){
+  list.replaceChildren();
+  state.textContent='Spielernamen nicht verfügbar: '+e.message+' (keine veralteten Namen angezeigt)';
+ }finally{onlinePlayersBusy=false}
+}
+
 async function loadPlayers(){
  const list=$('managedPlayers');list.textContent='Lade Allowlist ...';
  try{
   const d=await api('players-state');
   txt('allowlistState',d.allowlist_enabled===true?'Allowlist aktiv – nur eingetragene Gamertags können beitreten':d.allowlist_enabled===false?'Allowlist deaktiviert – Liste schränkt den Zugang derzeit nicht ein':'Allowlist-Einstellung unbekannt');
-  txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+' Die Online-Spielernamen können über die Konsole abgefragt werden.');
+  txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+' Online-Spieler werden separat automatisch abgefragt.');
   list.replaceChildren();
   if(!d.players?.length){const p=document.createElement('p');p.className='muted';p.textContent='Keine Allowlist-Einträge vorhanden.';list.append(p);return}
   for(const player of d.players){
@@ -300,12 +333,13 @@ async function playerCommand(command,name){
   setTimeout(loadPlayers,1200);
  }catch(e){showNotice(e.message,true)}
 }
-$('playersReload').addEventListener('click',loadPlayers);
-$('playersList').addEventListener('click',()=>{document.querySelector('[data-tab="console"]').click();consoleSend('list')});
+$('playersReload').addEventListener('click',()=>{loadPlayers();loadOnlinePlayers()});
+$('playersList').addEventListener('click',loadOnlinePlayers);
 $('allowlistList').addEventListener('click',()=>{document.querySelector('[data-tab="console"]').click();consoleSend('allowlist-list')});
 $('consoleSayForm').addEventListener('submit',e=>{e.preventDefault();const msg=$('consoleMessage').value.trim();if(!msg)return;consoleSend('say',msg);$('consoleMessage').value=''});
 $('playerActionForm').addEventListener('submit',e=>{e.preventDefault();const command=$('playerAction').value,value=$('playerName').value.trim();playerCommand(command,value)});
 setInterval(()=>{if(!$('app').hidden&&!$('console').hidden)loadConsole()},5000);
+setInterval(()=>{if(!$('app').hidden&&!$('players').hidden)loadOnlinePlayers()},15000);
 
 async function loadWorlds(){
  const el=$('worldList');el.textContent='Lade Welten ...';
