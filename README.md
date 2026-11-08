@@ -4,9 +4,17 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.7.1 – Korrektur der XUID-/OP-Zuordnung.** Quellstand für das nächste signierte Stable-Release.
+**2.8.0 – Entwicklungsstand: Live-Monitoring mit historischen Metriken.** Ausschließlich im separaten Testbranch; v2.7.1 bleibt die stabile Produktivversion.
 
 Neu: Online-Spielernamen über die Bedrock-Konsole automatisch anzeigen; Allowlist und Operatorrechte über Häkchen-Schalter ändern; XUID-basierter Operatorstatus, soweit eindeutig zuordenbar. Verbesserte visuelle Hierarchie auf den Verwaltungsseiten. Eine gesonderte Bedrock-Blockliste gibt es nicht. Details: [v2.7.0 Release Notes](docs/releases/v2.7.0.md) und [Entwicklungsdokumentation](docs/development/player-management-v2.7.0.md).
+
+## Neu in der Entwicklung: Monitoring 2.8.0
+
+Der neue Menüpunkt **Live-Monitoring** bietet historische Diagramme für die Minecraft-Dienst-CPU (100 % = ein belegter CPU-Kern), den Dienst-RAM und die Zahl der Online-Spieler. Ein root-verwalteter systemd-Timer erhebt alle 60 Sekunden eine Messung, auch wenn der Browser geschlossen bleibt. Die Daten liegen in einer lokal geschützten SQLite-Datei unter `/var/lib/bedrock-control-pro/monitoring.sqlite3` und werden nach 30 Tagen automatisch entfernt. Die Anzeige bietet 1h, 6h, 24h, 7d und 30d. Messwerte können ausfallen; nicht verfügbare Werte werden **nicht als 0** dargestellt.
+
+**Wichtig für ein späteres Upgrade von v2.7.1:** Das neue Monitoring benötigt einen zusätzlichen Root-Helper sowie zwei systemd-Dateien. Der **bereits installierte** v2.7.1-System-Updater erlaubt diese neuen Zielpfade noch nicht. Ein reines Ein-Klick-Webupdate auf 2.8.0 würde daher diese Systemkomponenten nicht zuverlässig installieren. Vor einer Stable-Freigabe ist hierfür ein gesonderter, verifizierter Erstinstallationsschritt vorgesehen. Bitte aktuell **nur auf dem Testcontainer** testen; nicht auf dem Produktivserver installieren.
+
+Details: [Monitoring-Entwicklungsnotizen](docs/development/monitoring-v2.8.0.md).
 
 ## Fehlerbehebung in 2.7.1
 
