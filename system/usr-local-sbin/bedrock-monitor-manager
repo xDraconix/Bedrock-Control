@@ -16,6 +16,7 @@ import time
 DB_DIR = pathlib.Path('/var/lib/bedrock-control-pro')
 DB_FILE = DB_DIR / 'monitoring.sqlite3'
 UNIT = 'mcbedrock.service'
+CGROUP_ROOT = pathlib.Path('/sys/fs/cgroup')
 RETENTION = 30 * 86400
 WINDOWS = {'1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800, '30d': 2592000}
 
@@ -43,9 +44,34 @@ def storage():
     db.commit()
     return db
 
+def cgroup_value(group, field):
+    """Read the exact systemd service cgroup (cgroup v2), never a host total."""
+    if not group or not group.startswith('/') or '..' in group.split('/'):
+        return None
+    if any(ch not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./' for ch in group):
+        return None
+    root = CGROUP_ROOT / group.lstrip('/')
+    path = root / ('cpu.stat' if field == 'cpu_ns' else 'memory.current')
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        contents = path.read_text(encoding='ascii')[:4096]
+        if field == 'cpu_ns':
+            for line in contents.splitlines():
+                parts = line.split()
+                if len(parts)==2 and parts[0]=='usage_usec' and parts[1].isascii() and parts[1].isdigit():
+                    return int(parts[1]) * 1000
+        else:
+            raw=contents.strip()
+            if raw.isascii() and raw.isdigit():
+                return int(raw)
+    except (OSError,UnicodeError,ValueError):
+        return None
+    return None
+
 def service_snapshot():
     r = command('/usr/bin/systemctl', 'show', UNIT, '--no-pager',
-                '--property=ActiveState,CPUUsageNSec,MemoryCurrent')
+                '--property=ActiveState,CPUUsageNSec,MemoryCurrent,ControlGroup')
     if r.returncode:
         raise ValueError('systemd-Dienststatus nicht lesbar')
     values = {}
@@ -57,7 +83,17 @@ def service_snapshot():
     def metric(key):
         raw = values.get(key, '')
         return int(raw) if raw.isascii() and raw.isdigit() else None
-    return online, metric('CPUUsageNSec'), metric('MemoryCurrent') if online else None
+    if not online:
+        return False, None, None
+    cpu_ns, ram_bytes = metric('CPUUsageNSec'), metric('MemoryCurrent')
+    # CPUAccounting/MemoryAccounting can be off for Debian LXC services.
+    # cgroup v2 provides per-unit counters without enabling those settings.
+    group = values.get('ControlGroup', '')
+    if cpu_ns is None:
+        cpu_ns = cgroup_value(group, 'cpu_ns')
+    if ram_bytes is None:
+        ram_bytes = cgroup_value(group, 'ram_bytes')
+    return True, cpu_ns, ram_bytes
 
 def online_count():
     # Reuse the existing verified Bedrock list parser, not arbitrary commands.
