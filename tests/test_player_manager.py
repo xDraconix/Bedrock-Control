@@ -116,7 +116,7 @@ with tempfile.TemporaryDirectory() as tmp:
         {'permission':'member','xuid':'2535460183415229'},
     ]
     (mod.BASE/'permissions.json').write_text(json.dumps(permissions),encoding='utf-8')
-    (mod.BASE/'server.properties').write_text('allow-list=false\\n',encoding='utf-8')
+    (mod.BASE/'server.properties').write_text('allow-list=false\n',encoding='utf-8')
     (mod.BASE/'allowlist.json').write_text('[]',encoding='utf-8')
     with redirect_stdout(out:=io.StringIO()):
         mod.player_state()
