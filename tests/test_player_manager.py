@@ -14,6 +14,7 @@ mod=importlib.machinery.SourceFileLoader(
 
 with tempfile.TemporaryDirectory() as tmp:
     mod.BASE=pathlib.Path(tmp)
+    mod.CACHE_DIR=pathlib.Path(tmp)/'cache'
     (mod.BASE/'allowlist.json').write_text(json.dumps([
         {'name':'Alex Builder','xuid':'12345','ignoresPlayerLimit':False},
         {'name':'No Xuid'},
@@ -151,3 +152,58 @@ with tempfile.TemporaryDirectory() as tmp:
     assert all('xuid' not in p and '_xuid' not in p for p in data['players'])
     assert data['allowlist_enabled'] is False, 'a saved allowlist can exist when enforcement is off'
 print('OK: actual Bedrock XUID-only permissions and name-to-XUID allowlist mapping')
+
+
+# Realistic console line from Bedrock 1.26.63.1, parsed only for identity.
+connect='''[2026-11-08 14:25:41:839 INFO] Player connected: F4U DraconiX, xuid: 2535419664549744
+[2026-11-08 14:25:47:838 INFO] Player Spawned: F4U DraconiX xuid: 2535419664549744
+'''
+assert mod.connection_events(connect)=={'f4u draconix':'2535419664549744'}
+assert mod.connection_events(connect+'[2026-11-08 14:26:41:839 INFO] Player connected: F4U DraconiX, xuid: 1111111111111111\n')=={}
+assert mod.connection_events('Player connected: Bad, xuid: 123')=={}
+assert mod.connection_events('[2026-11-08 14:25:41:839 INFO] Player connected: Bad"Name, xuid: 123\n')=={}
+
+with tempfile.TemporaryDirectory() as tmp:
+    mod.BASE=pathlib.Path(tmp)
+    mod.CACHE_DIR=pathlib.Path(tmp)/'cache'
+    (mod.BASE/'allowlist.json').write_text(json.dumps([{
+        'name':'F4U DraconiX', 'ignoresPlayerLimit':False
+    }]),encoding='utf-8')
+    (mod.BASE/'permissions.json').write_text(json.dumps([{
+        'xuid':'2535419664549744','permission':'operator'
+    }]),encoding='utf-8')
+    (mod.BASE/'server.properties').write_text('allow-list=true\n',encoding='utf-8')
+    with patch.object(mod,'screen_capture',return_value=connect) as capture:
+        with redirect_stdout(out:=io.StringIO()):
+            mod.player_state()
+        first=json.loads(out.getvalue())
+        assert capture.call_count==1, 'screen history scanned on first cache miss'
+    assert first['players'][0]['operator'] is True
+    assert first['players'][0]['permission_known'] is True
+    assert all('xuid' not in p for p in first['players'])
+    cachefile=mod.CACHE_DIR/'player-identities.json'
+    assert json.loads(cachefile.read_text())=={'f4u draconix':'2535419664549744'}
+    assert cachefile.stat().st_mode & 0o077==0
+    with patch.object(mod,'screen_capture',side_effect=AssertionError('unexpected rescan')):
+        with redirect_stdout(out:=io.StringIO()):
+            mod.player_state()
+        assert json.loads(out.getvalue())['players'][0]['operator'] is True
+    assert json.loads(out.getvalue())['players'][0]['permission_known'] is True
+
+    # Roles are always read fresh from permissions.json, never cached.
+    (mod.BASE/'permissions.json').write_text(json.dumps([{
+        'xuid':'2535419664549744','permission':'member'
+    }]),encoding='utf-8')
+    with patch.object(mod,'screen_capture',side_effect=AssertionError('unexpected rescan')):
+        with redirect_stdout(out:=io.StringIO()):
+            mod.player_state()
+    assert json.loads(out.getvalue())['players'][0]['operator'] is False
+
+    # Cached identity storage must not follow symlinks.
+    cachefile.unlink()
+    cachefile.symlink_to(mod.BASE/'permissions.json')
+    with redirect_stdout(out:=io.StringIO()):
+        mod.player_state()
+    assert json.loads(out.getvalue())['players'][0]['permission_known'] is False
+    assert any('Identitäts-Cache nicht verfügbar' in w for w in json.loads(out.getvalue())['warnings'])
+print('OK: Bedrock join log → secure persistent identity cache → fresh permissions with no rescan')
