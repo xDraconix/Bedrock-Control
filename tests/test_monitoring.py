@@ -27,9 +27,13 @@ with tempfile.TemporaryDirectory() as tmp:
             assert e['players']==0
             hist=mod.history(db,'1h',1260)
             assert hist['interval_seconds']==60
-            assert len(hist['points'])==5
+            assert len(hist['points'])<=450
+            assert hist['samples_count']==5
             assert hist['latest']['players']==0
-            assert hist['points'][2]['players'] is None, 'unavailable player counts are not fake zeros'
+            measured=[p for p in hist['points'] if p['samples']]
+            assert len(measured)==5
+            assert next(p for p in measured if p['ts']==1080)['players'] is None, 'unavailable player counts are not fake zeros'
+            assert any(p['samples']==0 and p['players'] is None for p in hist['points']), 'missing minutes must be chart gaps'
             assert all(p['ts']<=1260 for p in hist['points'])
             assert (mod.DB_FILE.stat().st_mode & 0o077)==0
             try:
