@@ -89,7 +89,7 @@ def identity_cache(needed):
         return {}, []
     CACHE_DIR.mkdir(mode=0o700, parents=False, exist_ok=True)
     st = CACHE_DIR.lstat()
-    if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o077:
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
         raise ValueError('Identitäts-Cacheverzeichnis ist nicht sicher')
     lockfd = os.open(CACHE_DIR/'player-identities.lock',
                      os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW|os.O_CLOEXEC, 0o600)
@@ -101,7 +101,7 @@ def identity_cache(needed):
             fd = os.open(path, os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
             with os.fdopen(fd, 'rb') as stream:
                 fst = os.fstat(stream.fileno())
-                if not stat.S_ISREG(fst.st_mode) or fst.st_uid != 0 or fst.st_mode & 0o077 or fst.st_size > 65536:
+                if not stat.S_ISREG(fst.st_mode) or fst.st_uid != os.geteuid() or fst.st_mode & 0o077 or fst.st_size > 65536:
                     raise ValueError('Identitäts-Cachedatei ist nicht sicher')
                 raw = json.loads(stream.read(65537).decode('utf-8'))
             if not isinstance(raw, dict):
@@ -165,6 +165,12 @@ def online_players():
             found=parse_online_list(screen_capture())
             if found is not None and found['response_id']!=old_id:
                 del found['response_id']
+                # Warm the persistent cache for newly seen online names. The
+                # roster must remain available if optional identity lookup fails.
+                try:
+                    identity_cache({name.casefold() for name in found['players']})
+                except (OSError, ValueError):
+                    pass
                 reply(ok=True,online=True,**found)
                 return
         raise ValueError('Keine frische, vollständig lesbare Antwort auf list innerhalb von 4 Sekunden')
