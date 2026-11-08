@@ -73,6 +73,8 @@ def validated_system_plan(installer):
                 'Ungültiger System-Quelldateipfad')
         require(isinstance(dst,str) and dst.startswith(('/usr/local/bin/bedrock-panel-',
                   '/usr/local/sbin/bedrock-','/etc/systemd/system/bedrock-panel-self-update.service',
+                  '/etc/systemd/system/bedrock-monitor.service',
+                  '/etc/systemd/system/bedrock-monitor.timer',
                   '/etc/sudoers.d/bedrock-control-pro','/etc/apache2/sites-available/bedrock-control-pro.conf',
                   '/etc/tmpfiles.d/bedrock-')) or
                 re.fullmatch(r'/etc/php/\d+\.\d+/apache2/conf\.d/99-bedrock-addon-upload\.ini',dst) is not None,
