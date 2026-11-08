@@ -137,7 +137,7 @@ async function loadMonitoring(){
   txt('monitorRam',fresh && Number.isFinite(latest.ram_bytes)?(latest.ram_bytes/1073741824).toLocaleString('de-DE',{maximumFractionDigits:2})+' GiB':'–');
   txt('monitorPlayers',fresh && Number.isFinite(latest.players)?String(latest.players):'–');
   txt('monitorTime',latest?new Date(latest.ts*1000).toLocaleTimeString('de-DE'):'–');
-  txt('monitorState',d.points.length+' Datenpunkte · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
+  txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+' Messungen · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
   redrawMonitoring();
  }catch(e){monitoringPoints=[];redrawMonitoring();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
  finally{monitoringBusy=false}
