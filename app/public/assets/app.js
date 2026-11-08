@@ -287,7 +287,49 @@ function inlinePlayerActions(name){
  }
  return buttons;
 }
+// Roles are matched only by exact case-insensitive gamertag. Unknown is never treated as member.
+let knownPlayerRoles=new Map();
+let lastOnlineRoster=null;
 let onlinePlayersBusy=false;
+
+function playerBadges(entry,isOnline){
+ const badges=document.createElement('div');badges.className='player-badges';
+ const badge=(value,cls)=>{
+  const span=document.createElement('span');span.className='player-badge '+cls;
+  span.textContent=value;badges.append(span);
+ };
+ if(isOnline)badge('● Online','player-badge-online');
+ if(entry){
+  badge('✓ Allowlist','player-badge-allowed');
+  if(entry.permission_known){
+   const role=entry.permission;
+   badge(role==='operator'?'★ OP':role==='visitor'?'Besucher':'Mitglied',
+         role==='operator'?'player-badge-operator':'player-badge-member');
+  }else{
+   badge('Rechte unbekannt','player-badge-unknown');
+  }
+ }else if(isOnline){
+  badge('Nicht auf Allowlist','player-badge-not-allowed');
+  badge('Rechte unbekannt','player-badge-unknown');
+ }
+ return badges;
+}
+
+function renderOnlinePlayers(players){
+ const list=$('onlinePlayersList');list.replaceChildren();
+ if(!players.length){
+  const p=document.createElement('p');p.className='muted';p.textContent='Derzeit keine Spieler online.';list.append(p);
+  return;
+ }
+ for(const player of players){
+  const row=document.createElement('div');row.className='player-entry player-entry-online';
+  const info=document.createElement('div');info.className='player-entry-info';
+  const name=document.createElement('strong');name.className='player-name';name.textContent=player;
+  info.append(name,playerBadges(knownPlayerRoles.get(player.toLocaleLowerCase('de-DE')),true));
+  row.append(info,inlinePlayerActions(player));list.append(row);
+ }
+}
+
 async function loadOnlinePlayers(){
  if(onlinePlayersBusy)return;
  onlinePlayersBusy=true;
@@ -296,21 +338,12 @@ async function loadOnlinePlayers(){
  try{
   const d=await api('players-online');
   if(!Array.isArray(d.players)||!Number.isInteger(d.count)||d.count!==d.players.length)throw Error('Unvollständige Serverantwort');
-  list.replaceChildren();
+  if(d.players.some(n=>typeof n!=='string'))throw Error('Ungültige Spielernamen');
+  lastOnlineRoster=d.players.slice();
   state.textContent=d.count+' von '+d.max_players+' Spielern online · frisch über die Konsole abgefragt';
-  if(!d.players.length){
-   const p=document.createElement('p');p.className='muted';p.textContent='Derzeit keine Spieler online.';list.append(p);
-  }else{
-   for(const player of d.players){
-    const row=document.createElement('div');row.className='player-entry player-entry-online';
-    const info=document.createElement('div');info.className='player-entry-info';
-    const name=document.createElement('strong');name.className='player-name';name.textContent=player;
-    const meta=document.createElement('span');meta.className='player-status player-status-online';meta.textContent='● Online';
-    info.append(name,meta);
-    row.append(info,inlinePlayerActions(player));list.append(row);
-   }
-  }
+  renderOnlinePlayers(lastOnlineRoster);
  }catch(e){
+  lastOnlineRoster=null;
   list.replaceChildren();
   state.textContent='Spielernamen nicht verfügbar: '+e.message+' (keine veralteten Namen angezeigt)';
  }finally{onlinePlayersBusy=false}
@@ -324,18 +357,18 @@ async function loadPlayers(){
   $('allowlistState').className='player-allowlist-state '+(d.allowlist_enabled===true?'player-allowlist-enabled':'player-allowlist-disabled');
   txt('playersWarning',(Array.isArray(d.warnings)&&d.warnings.length?d.warnings.join(' · '):'')+' Online-Spieler werden separat automatisch abgefragt.');
   list.replaceChildren();
-  if(!d.players?.length){const p=document.createElement('p');p.className='muted';p.textContent='Keine Allowlist-Einträge vorhanden.';list.append(p);return}
+  if(!Array.isArray(d.players))throw Error('Ungültige Allowlist-Antwort');
+  knownPlayerRoles=new Map(d.players.map(player=>[player.name.toLocaleLowerCase('de-DE'),player]));
+  if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);
+  if(!d.players.length){const p=document.createElement('p');p.className='muted';p.textContent='Keine Allowlist-Einträge vorhanden.';list.append(p);return}
   for(const player of d.players){
    const row=document.createElement('div');row.className='player-entry player-entry-allowlist';
    const info=document.createElement('div');info.className='player-entry-info';
    const name=document.createElement('strong');name.className='player-name';name.textContent=player.name;
-   const meta=document.createElement('span');
-   meta.className='player-status '+(player.permission_known?(player.operator?'player-status-operator':'player-status-member'):'player-status-unknown');
-   meta.textContent=player.permission_known?({operator:'★ Operator',member:'Mitglied',visitor:'Besucher'}[player.permission]||'Status unbekannt'):'⚠ Berechtigungsstatus nicht zuordenbar';
-   info.append(name,meta);
+   info.append(name,playerBadges(player,false));
    row.append(info,inlinePlayerActions(player.name));list.append(row);
   }
- }catch(e){list.textContent='Spielerverwaltung nicht verfügbar: '+e.message;showNotice(e.message,true)}
+ }catch(e){knownPlayerRoles=new Map();if(lastOnlineRoster!==null)renderOnlinePlayers(lastOnlineRoster);list.textContent='Spielerverwaltung nicht verfügbar: '+e.message;showNotice(e.message,true)}
 }
 async function playerCommand(command,name){
  const labels={'kick':'Spieler kicken','allowlist-add':'Zur Allowlist hinzufügen','allowlist-remove':'Von Allowlist entfernen','op':'Operatorrechte erteilen','deop':'Operatorrechte entziehen'};
@@ -344,7 +377,7 @@ async function playerCommand(command,name){
  try{
   const d=await api('console-send',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({command,value:name})});
   showNotice(d.message||'Befehl an die Serverkonsole gesendet. Ausführung dort prüfen.');
-  setTimeout(loadPlayers,1200);
+  setTimeout(()=>{loadPlayers();loadOnlinePlayers()},1200);
  }catch(e){showNotice(e.message,true)}
 }
 $('playersReload').addEventListener('click',()=>{loadPlayers();loadOnlinePlayers()});
