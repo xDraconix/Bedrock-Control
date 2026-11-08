@@ -44,6 +44,8 @@ jobs:
           PY
       - name: Test player roster and console command validation
         run: python3 tests/test_player_manager.py
+      - name: Test player UI toggle behavior
+        run: node tests/test_player_ui.cjs
       - name: Test read-only Bedrock world seed parser
         run: python3 tests/test_world_seed.py
       - name: Test component update allowlist
