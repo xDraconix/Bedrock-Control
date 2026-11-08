@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Signed system-update fixture: v2.6.1 (intentional read-only marker).
+# ROLLBACK TEST ONLY: v2.6.2 candidate marker (must NOT remain installed after rollback).
 import subprocess
 """Restricted world selection helper. Never starts/stops Minecraft."""
 import json, os, pathlib, re, sys, tempfile, subprocess, shutil, zipfile, tarfile, time, uuid, stat
