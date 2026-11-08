@@ -35,6 +35,24 @@ The protected paths include all Minecraft worlds, `server.properties`, `mcbedroc
 
 The 2.5.5 updater **cannot retroactively gain system-file transaction support** merely by downloading v2.6.0; it only installs web files. Therefore **v2.6.0 must initially be installed through the audited `bash install.sh` on a test host**. Only *subsequent* signed updates executed by the 2.6.0+ updater can replace system components.
 
+## Manual signed end-to-end failure test on the disposable container
+
+After a successful signed v2.6.1 installation and the signed v2.6.2 intentional HTTP-503 rollback test, the latest **development source code** contains a dedicated harness to inject an error during the third root-system-component replacement. The harness loads the **new updater implementation only in memory** and invokes the full signed install/verify/snapshot/rollback transaction; the installed updater binary remains unchanged.
+
+Do not run this on any production server. Create a fresh Proxmox snapshot first.
+
+```bash
+cd /root/Bedrock-Control
+git fetch origin refs/heads/feature/full-system-updater-v2.6.0:refs/remotes/origin/feature/full-system-updater-v2.6.0
+git merge --ff-only origin/feature/full-system-updater-v2.6.0
+python3 tests/test_signed_update_rollback_e2e.py --confirm-fault-test /root/bedrock-update-v2.6.2 \
+  2>&1 | tee /root/bedrock-mid-component-rollback-e2e.log
+```
+
+For accurate command status, run `set -o pipefail` before the piped test. The harness **requires** the original, properly signed v2.6.2 HTTP-failure fixture (not one of the tampered copies), the already-installed v2.6.1 version, healthy Apache/Minecraft and an exact development branch name. It takes the existing exclusive update lock. A simulated system-component write failure must be followed by automatic recovery, comparison of all snapshot file hashes/owners/permissions, v2.6.1 version and world-manager marker restoration, plus healthy Apache/Minecraft/HTTP. Test exits nonzero if any condition is violated.
+
+The separate tempdir unit test `sudo python3 tests/test_system_component_rollback.py` additionally covers **newly created files** not present in the pre-update snapshot. A real E2E test with an actually newly introduced helper is still outside this test's coverage.
+
 ## Required testing before merge
 
 - GitHub Actions syntax, fixture plan tests and signed archive build
