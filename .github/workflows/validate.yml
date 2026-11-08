@@ -31,6 +31,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           files = [
+              Path("system/usr-local-sbin/bedrock-console-manager"),
               Path("system/usr-local-bin/bedrock-panel-apply-release"),
               Path("system/usr-local-bin/bedrock-panel-system-plan"),
               Path("system/usr-local-bin/bedrock-panel-verify-release"),
@@ -41,6 +42,8 @@ jobs:
               compile(path.read_bytes(), str(path), "exec")
               print("OK:", path)
           PY
+      - name: Test player roster and console command validation
+        run: python3 tests/test_player_manager.py
       - name: Test read-only Bedrock world seed parser
         run: python3 tests/test_world_seed.py
       - name: Test component update allowlist
@@ -58,5 +61,5 @@ jobs:
       - name: Build and validate unsigned installer ZIP
         run: |
           bash release-tools/build-release.sh
-          unzip -tq dist/Bedrock-Control-PRO-v2.6.0-Release.zip
-          unzip -p dist/Bedrock-Control-PRO-v2.6.0-Release.zip bedrock-control-pro-2.6.0-installer/VERSION | grep -qx 2.6.0
+          unzip -tq dist/Bedrock-Control-PRO-v2.7.0-Release.zip
+          unzip -p dist/Bedrock-Control-PRO-v2.7.0-Release.zip bedrock-control-pro-2.7.0-installer/VERSION | grep -qx 2.7.0
