@@ -138,3 +138,94 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
  #players .player-entry-actions{justify-content:flex-start;width:100%}
  #players .player-action{flex:1 1 75px}
 }
+
+/* v2.7 – permission chips, consistent cross-page hierarchy */
+/* Shared surfaces and typography: page styles apply to all tabs without changing controls. */
+.tab .card>h2{
+ color:#f6fff0;
+ font-size:1.24rem;
+ line-height:1.35;
+ font-weight:800;
+}
+.tab .card>h3{
+ color:#edfbe8;
+ font-size:1.07rem;
+ line-height:1.4;
+ font-weight:800;
+ padding-left:12px;
+ border-left:3px solid #93c96d;
+ margin:26px 0 14px;
+}
+.tab .card>p.muted,.tab .card>.muted{
+ color:#a8bbab;
+ line-height:1.65;
+}
+.tab .card{
+ border-color:#4b6248;
+}
+.tab .card .addon-row,
+.tab .card .backuplist>div:not(.player-entry){
+ border:1px solid #405b44;
+ border-left:3px solid #78995b;
+ background:linear-gradient(110deg,#14251a,#1a2a20);
+ border-radius:8px;
+ padding:14px 16px;
+ margin-bottom:10px;
+ min-width:0;
+}
+.tab .card .addon-row:hover,
+.tab .card .backuplist>div:not(.player-entry):hover{
+ border-color:#779e6e;
+}
+.tab .card .addon-row b,
+.tab .card .addon-row strong,
+.tab .card .backuplist>div:not(.player-entry)>span:first-child{
+ color:#f6fff0;
+ font-weight:760;
+}
+.tab .card .addon-row .muted{
+ color:#acbfad;
+}
+.tab .card label:not(.property-field label){
+ color:#d4e4d0;
+}
+.tab .card button:focus-visible,
+.tab .card input:focus-visible,
+.tab .card select:focus-visible{
+ outline:2px solid #bceb93;
+ outline-offset:3px;
+}
+#players .player-badges{
+ display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;
+}
+#players .player-badge{
+ display:inline-flex;align-items:center;
+ border:1px solid transparent;border-radius:5px;
+ padding:4px 8px;
+ font-size:.72rem;font-weight:760;
+ line-height:1.4;letter-spacing:.02em;
+}
+#players .player-badge-online{
+ background:#1b4730;border-color:#417b4e;color:#b5ffc1;
+}
+#players .player-badge-allowed{
+ background:#1d4e48;border-color:#3d7f71;color:#c1fff0;
+}
+#players .player-badge-operator{
+ background:#514222;border-color:#988044;color:#ffe6a3;
+}
+#players .player-badge-member{
+ background:#303d39;border-color:#566e66;color:#d6e6df;
+}
+#players .player-badge-unknown{
+ background:#443821;border-color:#897042;color:#f7d197;
+}
+#players .player-badge-not-allowed{
+ background:#4c2d30;border-color:#895156;color:#ffd2d0;
+}
+@media(max-width:760px){
+ .tab .card .addon-row,
+ .tab .card .backuplist>div:not(.player-entry){
+  padding:12px;
+ }
+}
