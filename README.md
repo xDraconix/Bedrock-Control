@@ -4,13 +4,13 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.7.1 – Teststand: XUID-Zuordnung von Allowlist und Operatorrechten.** Nur im Entwicklungszweig; v2.7.0 ist die veröffentlichte stabile Version.
+**2.7.1 – Korrektur der XUID-/OP-Zuordnung.** Quellstand für das nächste signierte Stable-Release.
 
 Neu: Online-Spielernamen über die Bedrock-Konsole automatisch anzeigen; Allowlist und Operatorrechte über Häkchen-Schalter ändern; XUID-basierter Operatorstatus, soweit eindeutig zuordenbar. Verbesserte visuelle Hierarchie auf den Verwaltungsseiten. Eine gesonderte Bedrock-Blockliste gibt es nicht. Details: [v2.7.0 Release Notes](docs/releases/v2.7.0.md) und [Entwicklungsdokumentation](docs/development/player-management-v2.7.0.md).
 
-## Testumfang für 2.7.1
+## Fehlerbehebung in 2.7.1
 
-Der Server ergänzt die XUID bei Allowlist-Einträgen nicht zuverlässig. Deshalb erkennt das Panel Spielername und XUID bei Bedarf aus **autoritativen `Player connected`-Meldungen** der bestehenden SCREEN-Konsole und hält die Zuordnung in einem root-exklusiven Cache unter `/var/lib/bedrock-control-pro/player-identities.json` vor. Neue Spielernamen lösen eine erneute, begrenzte Suche aus; bekannte Zuordnungen werden wiederverwendet. Die Rollen werden **jedes Mal frisch aus `permissions.json` gelesen**, auch bei Online-Spielern ohne Allowlist-Eintrag. Die XUID wird nicht im Webpanel angezeigt. Unbekannte oder widersprüchliche Identitäten bleiben ohne behauptete Rechte. Die Konsole bleibt weiterhin erforderlich, um neue Identitäten zu erfassen, nicht aber für jede Statusabfrage.
+Der Server ergänzt die XUID bei Allowlist-Einträgen nicht zuverlässig. Deshalb erkennt das Panel Spielername und XUID bei Bedarf aus **autoritativen `Player connected`-Meldungen** der bestehenden SCREEN-Konsole und hält die Zuordnung in einem root-exklusiven Cache unter `/var/lib/bedrock-control-pro/player-identities.json` vor. Neue Spielernamen lösen eine erneute, begrenzte Suche aus; bekannte Zuordnungen werden wiederverwendet. Die Rollen werden **jedes Mal frisch aus `permissions.json` gelesen**, auch bei Online-Spielern ohne Allowlist-Eintrag. Die XUID wird nicht im Webpanel angezeigt. Unbekannte oder widersprüchliche Identitäten bleiben ohne behauptete Rechte. Lange, durch SCREEN umgebrochene XUIDs werden vollständig rekonstruiert. Die Konsole bleibt weiterhin erforderlich, um neue Identitäten zu erfassen, nicht aber für jede Statusabfrage. Details und Testnachweise: [v2.7.1 Release Notes](docs/releases/v2.7.1.md).
 
 ## Neue Funktion in 2.6.0
 
@@ -78,7 +78,7 @@ Optional alles einschließlich GitHub-Release automatisch veröffentlichen:
 bash release-tools/prepare-signed-release.sh /SICHERER-ORT/release-private.pem --publish
 ```
 
-Die Veröffentlichung benötigt **eine ausdrückliche Eingabe des Versions-Tags** (beispielsweise `v2.7.0`). Wenn dieser Tag oder das Release bereits existiert, wird abgebrochen. Uploads ersetzen keine vorhandenen Dateien. Die drei Dateien werden unter `~/Bedrock-Control-Releases/vX.Y.Z/` abgelegt. Optional: `--output /ZIEL/VERZEICHNIS`.
+Die Veröffentlichung benötigt **eine ausdrückliche Eingabe des Versions-Tags** (beispielsweise `v2.7.1`). Wenn dieser Tag oder das Release bereits existiert, wird abgebrochen. Uploads ersetzen keine vorhandenen Dateien. Die drei Dateien werden unter `~/Bedrock-Control-Releases/vX.Y.Z/` abgelegt. Optional: `--output /ZIEL/VERZEICHNIS`.
 
 **Hinweis:** Der lokale Build erfordert keine Veröffentlichung. Der Modus `--publish` erstellt ein öffentliches **stabiles** Release (kein Pre-Release). Er sollte erst verwendet werden, nachdem der beabsichtigte Commit freigegeben und getestet wurde. Bei fehlgeschlagenem Upload bleiben die lokal signierten Dateien erhalten; Fehler sind vor einem erneuten Versuch auf GitHub zu prüfen.
 
@@ -90,11 +90,11 @@ Das Installationspaket wird aus einem **sauberen, geprüften Git-Commit** gebaut
 bash release-tools/build-release.sh
 ```
 
-Das erzeugte Archiv `dist/Bedrock-Control-PRO-v2.7.0-Release.zip` anschließend **auf dem vertrauenswürdigen Signierrechner** signieren:
+Das erzeugte Archiv `dist/Bedrock-Control-PRO-v2.7.1-Release.zip` anschließend **auf dem vertrauenswürdigen Signierrechner** signieren:
 
 ```bash
-bash release-tools/sign-release.sh v2.7.0 \
-  dist/Bedrock-Control-PRO-v2.7.0-Release.zip \
+bash release-tools/sign-release.sh v2.7.1 \
+  dist/Bedrock-Control-PRO-v2.7.1-Release.zip \
   /SICHERER-ORT/release-private.pem
 ```
 
@@ -102,6 +102,7 @@ Genau drei Dateien als GitHub-Release-Assets veröffentlichen: ZIP, `.manifest`,
 
 ## Entwicklung und Dokumentation
 
+- [Release Notes v2.7.1](docs/releases/v2.7.1.md)
 - [Release Notes v2.7.0](docs/releases/v2.7.0.md)
 - [Release Notes v2.6.0](docs/releases/v2.6.0.md)
 - [Release Notes v2.5.5](docs/releases/v2.5.5.md)
