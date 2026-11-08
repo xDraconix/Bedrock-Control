@@ -117,6 +117,12 @@ with tempfile.TemporaryDirectory() as tmp:
     ]
     (mod.BASE/'permissions.json').write_text(json.dumps(permissions),encoding='utf-8')
     (mod.BASE/'server.properties').write_text('allow-list=false\n',encoding='utf-8')
+    (mod.BASE/'allowlist.json').write_text('null',encoding='utf-8')
+    with redirect_stdout(out:=io.StringIO()):
+        mod.player_state()
+    null_data=json.loads(out.getvalue())
+    assert null_data['players']==[], 'JSON null means no allowlist entries'
+    assert not any('ungültige Daten' in w for w in null_data['warnings'])
     (mod.BASE/'allowlist.json').write_text('[]',encoding='utf-8')
     with redirect_stdout(out:=io.StringIO()):
         mod.player_state()
@@ -141,6 +147,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert by_name['Second Member']['operator'] is False
     assert by_name['No Permission']['permission_known'] is False
     assert by_name['No Xuid']['permission_known'] is False
+    assert any('ohne XUID' in w for w in data['warnings'])
     assert all('xuid' not in p and '_xuid' not in p for p in data['players'])
     assert data['allowlist_enabled'] is False, 'a saved allowlist can exist when enforcement is off'
 print('OK: actual Bedrock XUID-only permissions and name-to-XUID allowlist mapping')
