@@ -10,7 +10,7 @@ Neu: Online-Spielernamen über die Bedrock-Konsole automatisch anzeigen; Allowli
 
 ## Testumfang für 2.7.1
 
-Die vorhandene `allowlist.json`-zu-`permissions.json`-Verknüpfung über die XUID wird mit realitätsnahen Bedrock-Daten geprüft. Ohne Allowlist-Eintrag können Online-Spielernamen nicht allein durch die namenlose `permissions.json` zugeordnet werden. Das Panel kennzeichnet diesen Fall ausdrücklich; eine zusätzliche Auswertung der SCREEN-Verbindungslogs ist nicht geplant.
+Der Server ergänzt die XUID bei Allowlist-Einträgen nicht zuverlässig. Deshalb erkennt das Panel Spielername und XUID bei Bedarf aus **autoritativen `Player connected`-Meldungen** der bestehenden SCREEN-Konsole und hält die Zuordnung in einem root-exklusiven Cache unter `/var/lib/bedrock-control-pro/player-identities.json` vor. Neue Spielernamen lösen eine erneute, begrenzte Suche aus; bekannte Zuordnungen werden wiederverwendet. Die Rollen werden **jedes Mal frisch aus `permissions.json` gelesen**, auch bei Online-Spielern ohne Allowlist-Eintrag. Die XUID wird nicht im Webpanel angezeigt. Unbekannte oder widersprüchliche Identitäten bleiben ohne behauptete Rechte. Die Konsole bleibt weiterhin erforderlich, um neue Identitäten zu erfassen, nicht aber für jede Statusabfrage.
 
 ## Neue Funktion in 2.6.0
 
