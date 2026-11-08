@@ -74,8 +74,12 @@ def connection_events(output):
         if key in found and found[key] != xuid:
             conflicts.add(key)
         found[key] = xuid
-    for name in conflicts:
-        del found[name]
+    # A single XUID attached to multiple names in this capture is ambiguous,
+    # e.g. after a rename. Do not assign roles to either name on such evidence.
+    repeated_xuids = {xuid for xuid in found.values() if list(found.values()).count(xuid)>1}
+    for name, xuid in list(found.items()):
+        if name in conflicts or xuid in repeated_xuids:
+            del found[name]
     return found
 
 
