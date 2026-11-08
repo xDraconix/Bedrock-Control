@@ -4,17 +4,17 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.6.0** – Experimenteller Entwicklungskandidat mit signierten Systemkomponenten-Updates (auf Basis von v2.5.5 Stable).
+**2.6.0** – Stable-Kandidat: signierte Updates für Weboberfläche und freigegebene Bedrock-Control-Systemkomponenten mit automatischer Wiederherstellung bei Fehlern.
 
-> **Nicht produktiv einsetzen:** Die neue Systemkomponenten-Transaktion ist noch nicht auf einem laufenden Testcontainer validiert. Einmalige **Bootstrap-Installation mit `bash install.sh`** ist erforderlich, weil der bisherige 2.5.5-Web-Updater neue Root-Helfer noch nicht selbst installieren kann. Erst danach unterstützen spätere signierte Updates auch freigegebene Systemdateien.
+> **Wichtig beim Upgrade von 2.5.5:** Einmalig `bash install.sh` aus dem verifizierten **v2.6.0-Release** ausführen, damit die neue Update-Engine und der Systemdatei-Planer installiert werden. Der alte v2.5.5-Web-Updater kann diese Root-Komponenten noch nicht installieren. Ab v2.6.0 kann der Ein-Klick-Updater die freigegebenen Systemkomponenten bei nachfolgenden signierten Releases aktualisieren. [Upgrade-Anleitung und Testnachweise](docs/releases/v2.6.0.md).
 
 ## Neue Funktion in 2.6.0
 
-Bei signierten Updates wird ein strenger Installationsplan für Bedrock-Control-Hilfsprogramme und ausgewählte Systemkonfigurationen erstellt. Vor der Installation werden Python-/Bash-Syntax und sudoers geprüft, danach ein Recovery-Snapshot erstellt. Ein atomarer Dateiaustausch wird mit PHP-, Apache- und HTTP-Funktionstests abgesichert. Minecraft-Dienst, Welten und der lokale Ed25519-Vertrauensschlüssel sind ausgeschlossen. Details und notwendige Negativtests: [System-Updater-Entwicklung](docs/development/system-updater-v2.6.0.md).
+Bei signierten Updates wird ein strenger Installationsplan für Bedrock-Control-Hilfsprogramme und ausgewählte Systemkonfigurationen erstellt. Vor der Installation werden Python-/Bash-Syntax und sudoers geprüft, danach ein Recovery-Snapshot erstellt. Ein atomarer Dateiaustausch wird mit PHP-, Apache- und HTTP-Funktionstests abgesichert. Minecraft-Dienst, Welten und der lokale Ed25519-Vertrauensschlüssel sind ausgeschlossen. Details: [v2.6.0 Release Notes](docs/releases/v2.6.0.md) und [System-Updater-Entwicklung](docs/development/system-updater-v2.6.0.md).
 
 ## Neue Funktion in 2.5.5
 
-Im **Welten-Manager** werden der signierte 64-Bit-Weltseed aus Bedrocks `level.dat` sowie verfügbare Metadaten (Spielmodus, Schwierigkeit und Levelname) ausschließlich lesend angezeigt. Negative Seeds werden unterstützt und bleiben als Dezimalzeichenfolge unverändert; ein Kopieren-Button ist vorhanden. Nicht lesbare oder beschädigte Dateien werden als „Nicht verfügbar“ angezeigt. Die Funktion benötigt die aktualisierte Root-Komponente `bedrock-world-manager` und wird daher **nicht allein durch das Panel-Webupdate** installiert. Zum Testen den Entwicklungszweig auf einem Testcontainer auschecken und `bash install.sh` ausführen.
+Im **Welten-Manager** werden der signierte 64-Bit-Weltseed aus Bedrocks `level.dat` sowie verfügbare Metadaten (Spielmodus, Schwierigkeit und Levelname) ausschließlich lesend angezeigt. Negative Seeds werden unterstützt und bleiben als Dezimalzeichenfolge unverändert; ein Kopieren-Button ist vorhanden. Nicht lesbare oder beschädigte Dateien werden als „Nicht verfügbar“ angezeigt. Die Funktion benötigt die aktualisierte Root-Komponente `bedrock-world-manager` und wird daher **nicht allein durch das Panel-Webupdate** installiert. Bei einer Neuinstallation oder einem Upgrade von v2.5.5 auf v2.6.0 den verifizierten Installer verwenden.
 
 ## Funktionen
 
