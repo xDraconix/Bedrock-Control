@@ -31,3 +31,9 @@
 ## Bedienung (vereinfachte Spieler-Karten)
 
 Nach erfolgreichem Test der automatischen Online-Abfrage auf `Minecraft-Test-2` wurde die Dropdown-Eingabe entfernt. Jede Online-Spielerkarte sowie jeder Allowlist-Eintrag enthält nun direkt die vier Schaltflächen **OP**, **deOP**, **Allow**, **Disallow**. Damit können bereits sichtbare Namen ohne erneute Eingabe verwaltet werden. Jede Aktion erfordert weiter eine Bestätigung; das Panel bestätigt die Übergabe an SCREEN, **nicht** die tatsächliche Anwendung des Befehls durch Bedrock. Beide Rechteknöpfe bleiben auch dann verfügbar, wenn der Status wegen fehlender XUID nicht eindeutig zugeordnet werden kann. Das Kommando `kick` ist weiterhin über die bestehende, abgesicherte Konsolenbrücke möglich, wird in dieser vereinfachten Ansicht aber nicht angeboten.
+
+## Einheitliches Design und Status-Badges
+
+Das Spielermanagement zeigt nun separate Farbetiketten neben Spielernamen: `Online` (Grün), `Allowlist` (Türkis), `OP` (Gold), `Mitglied/Besucher` (Neutral) oder `Rechte unbekannt` (Bernstein). Bei online sichtbaren Spielern ohne Allowlist-Eintrag wird `Nicht auf Allowlist` angezeigt. **Diese Kennzeichnung bedeutet nur, dass kein Eintrag in `allowlist.json` vorhanden ist, nicht dass dieser Spieler vom Server ausgeschlossen ist.** Die Einstellung `allow-list` wird weiterhin gesondert angezeigt. Fehlende XUID-Zuordnungen führen zu `Rechte unbekannt`, niemals zu einer erfundenen Berechtigung.
+
+Die zuvor in der Spielerverwaltung bewährte Typografie, stärkere Kontraste und leicht abgesetzte Listenkarten werden über gemeinsame CSS-Selektoren auch auf Welten, Add-ons, Backups, Einstellungen und weitere Panel-Tabs angewendet. Keine sonstigen Endpunkte oder Minecraft-Dateien werden dafür geändert. Vor dem Stable-Merge alle Seiten auf Desktop und Mobilgerät kontrollieren, insbesondere dynamisch erzeugte Listen und Formularfelder.
