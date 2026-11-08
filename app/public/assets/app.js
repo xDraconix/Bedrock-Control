@@ -321,7 +321,7 @@ function playerBadges(entry,isOnline){
   }
  }else if(isOnline){
   badge('Nicht auf Allowlist','player-badge-not-allowed');
-  badge('Rechte unbekannt','player-badge-unknown');
+  badge('Rechte ohne Allowlist-XUID nicht zuordenbar','player-badge-unknown');
  }
  return badges;
 }
