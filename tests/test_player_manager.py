@@ -161,6 +161,7 @@ connect='''[2026-11-08 14:25:41:839 INFO] Player connected: F4U DraconiX, xuid: 
 assert mod.connection_events(connect)=={'f4u draconix':'2535419664549744'}
 assert mod.connection_events(connect+'[2026-11-08 14:26:41:839 INFO] Player connected: F4U DraconiX, xuid: 1111111111111111\n')=={}
 assert mod.connection_events('Player connected: Bad, xuid: 123')=={}
+assert mod.connection_events(connect+'[2026-11-08 14:26:41:839 INFO] Player connected: Other Gamer, xuid: 2535419664549744\n')=={}
 assert mod.connection_events('[2026-11-08 14:25:41:839 INFO] Player connected: Bad"Name, xuid: 123\n')=={}
 
 with tempfile.TemporaryDirectory() as tmp:
