@@ -159,7 +159,7 @@ def install(tag, package, manifest, signature):
             os.chmod(target,0o600)
             paths.append(target)
         archive, mf, sig=paths
-        print('1/6 Verifiziere Signatur, Hash und Archivstruktur ...',flush=True)
+        print('1/7 Verifiziere Signatur, Hash und Archivstruktur ...',flush=True)
         cmd(VERIFY,tag,archive,mf,sig,timeout=180)
         root_name='bedrock-control-pro-'+tag[1:]+'-installer/'
         source=workspace/'unpacked'
@@ -183,7 +183,7 @@ def install(tag, package, manifest, signature):
         # The signed package is trusted to provide PHP/JS/CSS, but never execute the included shell scripts.
         for item in new_public.rglob('*'):
             require(not item.is_symlink() and (item.is_file() or item.is_dir()), 'Ungültiger Dateityp in public/.')
-        print('2/6 Prüfe neues PHP und Apache-Konfiguration ...',flush=True)
+        print('2/7 Prüfe neues PHP und Apache-Konfiguration ...',flush=True)
         cmd('/usr/bin/php','-l',new_public/'index.php',timeout=30)
         cmd('/usr/bin/php','-l',new_set_password,timeout=30)
         cmd('/usr/sbin/apache2ctl','configtest',timeout=30)
