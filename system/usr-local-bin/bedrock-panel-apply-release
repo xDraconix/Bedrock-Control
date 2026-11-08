@@ -129,6 +129,22 @@ def install_system_files(installer, entries, added):
     cmd('/usr/bin/systemctl','daemon-reload',timeout=30)
 
 
+
+def remove_new_system_files(added):
+    """Rollback of files not present in the pre-update snapshot.
+
+    Existing files are restored from the verified snapshot; only newly
+    installed files may be removed here. Never follow an unexpected symlink.
+    """
+    for target in reversed(added):
+        target=Path(target)
+        require(not target.is_symlink(), 'Neues Rollback-Ziel wurde zu einem Symlink: '+str(target))
+        if target.exists():
+            require(target.is_file(), 'Neues Rollback-Ziel ist keine Datei: '+str(target))
+            target.unlink()
+
+
+
 def install(tag, package, manifest, signature):
     package, manifest, signature = (Path(p) for p in (package, manifest, signature))
     require(re.fullmatch(r'v\d+\.\d+\.\d+',tag) is not None,'Nur stabile Release-Tags vX.Y.Z erlaubt.')
@@ -256,9 +272,7 @@ def install(tag, package, manifest, signature):
                 recovery_from_snapshot=Path('/var/backups/bedrock-control-pro')/snapshot/'files/usr/local/bin/bedrock-panel-recovery'
                 secure_regular(recovery_from_snapshot)
                 cmd('/usr/bin/python3',recovery_from_snapshot,'restore',snapshot,'--confirm-restore',timeout=240)
-                for added in system_added:
-                    if added.is_file() and not added.is_symlink():
-                        added.unlink()
+                remove_new_system_files(system_added)
                 cmd('/usr/bin/systemctl','daemon-reload',timeout=30)
                 cmd('/usr/sbin/apache2ctl','configtest',timeout=30)
                 cmd('/usr/bin/systemctl','restart','apache2',timeout=60)
