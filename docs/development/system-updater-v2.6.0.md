@@ -4,7 +4,7 @@
 
 A signed release can install **only explicitly allowlisted Bedrock Control components** in addition to the existing web assets. Never execute `install.sh` or arbitrary scripts from the signed ZIP during a web update.
 
-**Do not deploy to production.** This branch requires real failure/rollback tests on `Minecraft-Test-2` before beta publication.
+**Historical development/test record.** Live signed update and rollback tests were successfully performed on the disposable `Minecraft-Test-2` container. For production use, install the reviewed, signed v2.6.0 release (not a test branch) after taking a snapshot. See [v2.6.0 release notes](../releases/v2.6.0.md).
 
 ## Scope
 
@@ -53,16 +53,18 @@ For accurate command status, run `set -o pipefail` before the piped test. The ha
 
 The separate tempdir unit test `sudo python3 tests/test_system_component_rollback.py` additionally covers **newly created files** not present in the pre-update snapshot. A real E2E test with an actually newly introduced helper is still outside this test's coverage.
 
-## Required testing before merge
+## Test results (2026-11-08)
 
-- GitHub Actions syntax, fixture plan tests and signed archive build
-- Live update from 2.6.0 test bootstrap to newer signed prerelease; ensure root helper versions actually update
-- Induced failure during component installation, after Apache restart, and during a health check
-- Snapshot integrity and automatic rollback including recovery, sudoers, Apache config, systemd unit and newly created files
-- Negative tests for symlink/traversal, unknown helper names and unsigned/altered archives
-- Minecraft server remains active throughout; verify world data and server config hashes before/after
-- Reboot persistence of new systemd unit and retained root-only update key/channel
+- [x] GitHub Actions syntax, fixture tests and signed archive build.
+- [x] Signed 2.6.0 → 2.6.1 update on Minecraft-Test-2; root-helper marker updated.
+- [x] HTTP 503 in signed 2.6.2 test package triggered automatic rollback to 2.6.1.
+- [x] Injected failure during the third component replacement triggered rollback to 2.6.1.
+- [x] Snapshot comparison: all 40 saved files and ownership/permissions match.
+- [x] Reject tampered ZIP and tampered Ed25519 signature before modifying panel files.
+- [x] Isolated test for new-file cleanup and symlink protection.
+- [ ] Newly introduced helper deletion under a **live** signed transaction remains untested.
+- [ ] Independent post-reboot verification and external Minecraft-world-file hash comparison remain recommended.
 
-## Release
+## Release policy
 
-Remain in `feature/full-system-updater-v2.6.0` until all tests pass. Do not change `main` or publish a Stable release based only on CI results.
+Merge only reviewed v2.6.0 code; never merge the 2.6.1/2.6.2 fault-injection test branches into the stable build. First upgrade from v2.5.5 requires the signed v2.6.0 **full installer**, because the v2.5.5 web-only updater cannot deploy the new root-owned components.
