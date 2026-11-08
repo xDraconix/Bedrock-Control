@@ -4,9 +4,13 @@ Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Deb
 
 ## Version
 
-**2.5.5** – Entwicklungskandidat mit Weltseed- und Metadatenanzeige (auf Basis v2.5.4 Stable).
+**2.6.0** – Experimenteller Entwicklungskandidat mit signierten Systemkomponenten-Updates (auf Basis von v2.5.5 Stable).
 
-> Wichtig: Die Sicherheitsprüfung und der Web-Updateablauf wurden auf Testcontainern erfolgreich erprobt. Ein browsergestütztes Panel-Update aktualisiert derzeit **nur** Webdateien und Panel-Versionsdatei, nicht sämtliche Root-Helper, systemd-Units oder sudoers-Regeln. Versionswechsel mit geänderten Systemkomponenten müssen mit `bash install.sh` ausgeführt werden.
+> **Nicht produktiv einsetzen:** Die neue Systemkomponenten-Transaktion ist noch nicht auf einem laufenden Testcontainer validiert. Einmalige **Bootstrap-Installation mit `bash install.sh`** ist erforderlich, weil der bisherige 2.5.5-Web-Updater neue Root-Helfer noch nicht selbst installieren kann. Erst danach unterstützen spätere signierte Updates auch freigegebene Systemdateien.
+
+## Neue Funktion in 2.6.0
+
+Bei signierten Updates wird ein strenger Installationsplan für Bedrock-Control-Hilfsprogramme und ausgewählte Systemkonfigurationen erstellt. Vor der Installation werden Python-/Bash-Syntax und sudoers geprüft, danach ein Recovery-Snapshot erstellt. Ein atomarer Dateiaustausch wird mit PHP-, Apache- und HTTP-Funktionstests abgesichert. Minecraft-Dienst, Welten und der lokale Ed25519-Vertrauensschlüssel sind ausgeschlossen. Details und notwendige Negativtests: [System-Updater-Entwicklung](docs/development/system-updater-v2.6.0.md).
 
 ## Neue Funktion in 2.5.5
 
