@@ -15,7 +15,7 @@ def screen(*args):
 def player_state():
     """Read current Bedrock allowlist and operator membership without editing files."""
     entries = []
-    permission_ids = set()
+    permission_levels = {}
     problems = []
     for name, limit in [('allowlist.json', 512*1024), ('permissions.json', 512*1024)]:
         path = BASE/name
@@ -41,21 +41,23 @@ def player_state():
                         player=item.get('name')
                         xuid=item.get('xuid')
                         if not isinstance(player,str) or not re.fullmatch(r'[A-Za-z0-9_ .-]{1,32}',player) or player.strip()!=player:continue
-                        entries.append({'name':player,'operator':False,'permission_known':False,
+                        entries.append({'name':player,'operator':False,'permission_known':False,'permission':None,
                                         '_xuid':xuid if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 else None})
                 else:
                     for item in records[:250]:
                         if not isinstance(item,dict):continue
                         xuid=item.get('xuid')
-                        if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 and item.get('permission')=='operator':
-                            permission_ids.add(xuid)
+                        permission=item.get('permission')
+                        if isinstance(xuid,str) and xuid.isdigit() and len(xuid)<=24 and permission in ('operator','member','visitor'):
+                            permission_levels[xuid]=permission
         except (ValueError,UnicodeDecodeError,OSError):
             problems.append(name+' enthält ungültige Daten')
         # os.fdopen closes the OS descriptor.
     for item in entries:
-        if item['_xuid'] is not None:
+        if item['_xuid'] in permission_levels:
             item['permission_known']=True
-            item['operator']=item['_xuid'] in permission_ids
+            item['permission']=permission_levels[item['_xuid']]
+            item['operator']=item['permission']=='operator'
         del item['_xuid']
     if len(entries)>1:
         entries.sort(key=lambda x:x['name'].casefold())
