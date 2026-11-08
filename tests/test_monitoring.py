@@ -63,6 +63,22 @@ with patch.object(mod,'command',return_value=Result(json.dumps({'count':3,'onlin
     assert mod.online_count()==3
 with patch.object(mod,'command',return_value=Result('',1)):
     assert mod.online_count() is None
+with tempfile.TemporaryDirectory() as tmp:
+    mod.CGROUP_ROOT=pathlib.Path(tmp)
+    group=mod.CGROUP_ROOT/'system.slice'/'mcbedrock.service'
+    group.mkdir(parents=True)
+    (group/'cpu.stat').write_text('usage_usec 188000000\\nuser_usec 120000000\\n')
+    (group/'memory.current').write_text('734003200\\n')
+    with patch.object(mod,'command',return_value=Result(
+        'ActiveState=active\\nCPUUsageNSec=[not set]\\nMemoryCurrent=[not set]\\nControlGroup=/system.slice/mcbedrock.service\\n')):
+        assert mod.service_snapshot()==(True,188000000000,734003200)
+    assert mod.cgroup_value('/../../etc','cpu_ns') is None
+    assert mod.cgroup_value('/wrong path','cpu_ns') is None
+    (group/'cpu.stat').unlink()
+    (group/'cpu.stat').symlink_to('/etc/passwd')
+    assert mod.cgroup_value('/system.slice/mcbedrock.service','cpu_ns') is None
+print('OK: LXC cgroup-v2 CPU/RAM fallback without host-wide metrics')
+
 print('OK: safe and nullable systemd and Minecraft data collection')
 
 service=(ROOT/'system/systemd/bedrock-monitor.service').read_text()
