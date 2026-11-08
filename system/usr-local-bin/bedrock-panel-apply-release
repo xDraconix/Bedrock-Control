@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Root-only, signed *panel web files* upgrade for testing, never Minecraft.
+"""Root-only, signed allowlisted panel + component upgrade, never Minecraft.
 
 Usage:
   bedrock-panel-apply-release install-local vX.Y.Z ZIP MANIFEST SIGNATURE --confirm-update
 
-No web/sudoers access; no network, shell execution, or release install.sh execution.
-This phase intentionally upgrades only public/, set-password.php and VERSION.
+No direct web/sudoers access; no arbitrary installer execution or downloads.
+Only predefined panel/Apache/PHP/systemd/helper paths are permitted after signature verification.
 """
 import fcntl
 import json
