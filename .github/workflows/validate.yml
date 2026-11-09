@@ -47,6 +47,8 @@ jobs:
         run: python3 tests/test_player_manager.py
       - name: Test historical monitoring storage and CPU deltas
         run: sudo python3 tests/test_monitoring.py
+      - name: Test interactive monitoring charts and null-safe summaries
+        run: node tests/test_monitoring_ui.cjs
       - name: Test player UI toggle behavior
         run: node tests/test_player_ui.cjs
       - name: Test read-only Bedrock world seed parser
