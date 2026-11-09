@@ -77,10 +77,19 @@ Die Monitoring-Grafiken wurden um folgende Funktionen erweitert:
 
 Die unabhängigen Node-Tests in `tests/test_monitoring_ui.cjs` prüfen Statistikwerte, Darstellung von 0 und NULL, die UI-Elemente und Maus-/Tastatur-Verknüpfungen.
 
+## Funktionsabnahme durch Betreiber (9. November 2026)
+
+**Bestätigt:** Die CPU-, RAM- und Spielerdiagramme funktionieren auf `Minecraft-Test-2`; die einheitliche Zeitskala, synchronisierte Mausmarkierung, Min/Ø/Max-Werte und die rein optische Glättung einzelner fehlender Intervalle wurden vom Betreiber ausdrücklich freigegeben: **„Das können wir so übernehmen.“**
+
+**Übernahmeumfang:** Die Anzeige-/Interpolationslogik aus PR #10 bleibt Bestandteil von v2.8.0. Die Messwerte in SQLite werden weiterhin nicht durch Schätzwerte ersetzt; Min/Ø/Max berechnet nur vorhandene Werte. Fehlende Spielerzählungen bleiben semantisch `null`, auch wenn die Kurve einen interpolierten Wert zeichnet.
+
+**Stable-Freigabesperre:** Für die noch fehlende signierte Migration von v2.7.1 mit alter System-Allowlist auf den v2.8.0-Monitoring-Timer siehe [Issue #11](https://github.com/xDraconix/Bedrock-Control/issues/11). Der UI-Test allein ist **keine** Freigabe für ein produktives signiertes Upgrade.
+
 ## Offene Testpunkte
 
 - [ ] Erster manueller Bootstrap auf dem isolierten Testcontainer
 - [ ] systemd-Timer sammelt bei geschlossenem Panel über mehrere Minuten
 - [ ] Tatsächliche CPU-Nanosekunden und MemoryCurrent des Containers prüfen
-- [ ] 1h/24h/7d-Zeitraum und mobile Darstellung im Browser prüfen
+- [x] Monitoring-Diagramme und Interpolation auf Minecraft-Test-2 vom Betreiber abgenommen
+- [ ] Vollständige Zeitfenster- und mobile Darstellung abschließend prüfen
 - [ ] Sicheren Übergang aus v2.7.1 vor einem Stable-Release festlegen
