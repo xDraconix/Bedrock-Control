@@ -35,6 +35,31 @@ for(const id of ['monitorCpuSummary','monitorRamSummary','monitorPlayersSummary'
   'monitorCpuTooltip','monitorRamTooltip','monitorPlayersTooltip']){
  assert(html.includes('id="'+id+'"'),'metric element exists '+id);
 }
+const interpolateStart=js.indexOf('function monitorDisplayValues(points,key)');
+const interpolateEnd=js.indexOf('function monitorChartColor(',interpolateStart);
+assert(interpolateStart>=0 && interpolateEnd>interpolateStart);
+const interpolateSource=js.slice(interpolateStart,interpolateEnd);
+const monitorDisplayValues=new Function(interpolateSource+'\nreturn monitorDisplayValues')();
+const isolated=[
+ {ts:0,cpu_pct:2,players:0},
+ {ts:60,cpu_pct:null,players:null},
+ {ts:120,cpu_pct:4,players:0}
+];
+assert.deepEqual(monitorDisplayValues(isolated,'cpu_pct'),[2,3,4]);
+assert.deepEqual(monitorDisplayValues(isolated,'players'),[0,0,0],'zero / unknown / zero displays a zero estimate');
+assert.equal(isolated[1].cpu_pct,null,'original sample stays unchanged');
+assert.deepEqual(monitorStats(isolated,'cpu_pct'),{min:2,mean:3,max:4,count:2},'statistics exclude estimated points');
+assert.deepEqual(monitorDisplayValues([
+ {ts:0,cpu_pct:2},{ts:60,cpu_pct:null},{ts:120,cpu_pct:null},{ts:180,cpu_pct:8}
+],'cpu_pct'),[2,null,null,8],'long gaps must remain gaps');
+assert.deepEqual(monitorDisplayValues([
+ {ts:0,cpu_pct:2},{ts:60,cpu_pct:null},{ts:300,cpu_pct:8}
+],'cpu_pct'),[2,null,8],'non-uniform timeline must not interpolate');
+assert.deepEqual(monitorDisplayValues([
+ {ts:0,players:null},{ts:60,players:0},{ts:120,players:null}
+],'players'),[null,0,null],'do not extrapolate endpoints');
+assert(js.includes('(geschätzt)'), 'hover tooltip must disclose interpolation');
+
 assert(js.includes('monitorX(index,points.length,width)'), 'shared aligned x position');
 assert(js.includes("canvas.addEventListener('pointermove'"), 'pointer-driven inspection');
 assert(js.includes("canvas.addEventListener('keydown'"), 'keyboard inspection');
