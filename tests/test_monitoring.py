@@ -65,8 +65,16 @@ with patch.object(mod,'command',return_value=Result('ActiveState=inactive\nCPUUs
     assert mod.service_snapshot()==(False,None,None)
 with patch.object(mod,'command',return_value=Result(json.dumps({'count':3,'online':True}))):
     assert mod.online_count()==3
-with patch.object(mod,'command',return_value=Result('',1)):
+with patch.object(mod,'command',return_value=Result('',1)) as failed, patch.object(mod.time,'sleep') as sleep:
     assert mod.online_count() is None
+    assert failed.call_count==2
+    sleep.assert_called_once()
+with patch.object(mod,'command',side_effect=[Result('',1),Result(json.dumps({'count':2,'online':True}))]) as retried, patch.object(mod.time,'sleep'):
+    assert mod.online_count()==2
+    assert retried.call_count==2
+with patch.object(mod,'command',return_value=Result(json.dumps({'count':0,'online':True}))) as succeeded:
+    assert mod.online_count()==0
+    assert succeeded.call_count==1
 with tempfile.TemporaryDirectory() as tmp:
     mod.CGROUP_ROOT=pathlib.Path(tmp)
     group=mod.CGROUP_ROOT/'system.slice'/'mcbedrock.service'
