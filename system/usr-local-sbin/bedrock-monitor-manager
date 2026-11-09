@@ -96,17 +96,23 @@ def service_snapshot():
     return True, cpu_ns, ram_bytes
 
 def online_count():
-    # Reuse the existing verified Bedrock list parser, not arbitrary commands.
-    r = command('/usr/local/sbin/bedrock-console-manager', 'online', timeout=10)
-    if r.returncode:
-        return None
-    try:
-        parsed = json.loads(r.stdout)
-        count = parsed.get('count')
-        if type(count) is int and 0 <= count <= 1000 and parsed.get('online') is True:
-            return count
-    except (ValueError, AttributeError, TypeError):
-        pass
+    """Best-effort fresh Bedrock count; transient SCREEN conflicts are not zero.
+
+    A separate panel request can overlap the timer's SCREEN query. Retry once
+    with a short delay. A failed retry remains NULL rather than fake 0.
+    """
+    for attempt in range(2):
+        try:
+            r = command('/usr/local/sbin/bedrock-console-manager', 'online', timeout=10)
+            if r.returncode == 0:
+                parsed = json.loads(r.stdout)
+                count = parsed.get('count')
+                if type(count) is int and 0 <= count <= 1000 and parsed.get('online') is True:
+                    return count
+        except (ValueError, AttributeError, TypeError, subprocess.TimeoutExpired):
+            pass
+        if attempt == 0:
+            time.sleep(0.65)
     return None
 
 def take_sample(db, now, online, cpu_ns, ram_bytes, players):
