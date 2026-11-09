@@ -73,6 +73,8 @@ def validated_system_plan(installer):
                 'Ungültiger System-Quelldateipfad')
         require(isinstance(dst,str) and dst.startswith(('/usr/local/bin/bedrock-panel-',
                   '/usr/local/sbin/bedrock-','/etc/systemd/system/bedrock-panel-self-update.service',
+                  '/etc/systemd/system/bedrock-monitor.service',
+                  '/etc/systemd/system/bedrock-monitor.timer',
                   '/etc/sudoers.d/bedrock-control-pro','/etc/apache2/sites-available/bedrock-control-pro.conf',
                   '/etc/tmpfiles.d/bedrock-')) or
                 re.fullmatch(r'/etc/php/\d+\.\d+/apache2/conf\.d/99-bedrock-addon-upload\.ini',dst) is not None,
@@ -130,6 +132,40 @@ def install_system_files(installer, entries, added):
 
 
 
+MONITOR_TARGETS = frozenset({
+    '/usr/local/sbin/bedrock-monitor-manager',
+    '/etc/systemd/system/bedrock-monitor.service',
+    '/etc/systemd/system/bedrock-monitor.timer',
+})
+MONITOR_TIMER = 'bedrock-monitor.timer'
+
+def monitoring_install_required(entries):
+    """Only a complete, signed three-part monitoring component set can start a timer."""
+    targets = {e['target'] for e in entries}
+    requested = targets & MONITOR_TARGETS
+    if requested and requested != MONITOR_TARGETS:
+        raise UpgradeError('Monitoring-Komponenten unvollständig; Dienst wird nicht aktiviert')
+    return bool(requested)
+
+
+def activate_monitoring_timer(entries):
+    """Enable only after complete component installation and all update health checks."""
+    if not monitoring_install_required(entries):
+        return False
+    cmd('/usr/bin/systemctl', 'enable', '--now', MONITOR_TIMER, timeout=45)
+    return True
+
+
+def rollback_monitoring_timer(attempted, was_enabled, was_active):
+    """Undo new timer activity before restoring or removing monitored unit files."""
+    if not attempted:
+        return
+    if not was_active:
+        cmd('/usr/bin/systemctl','stop',MONITOR_TIMER,timeout=30,check=False)
+    if not was_enabled:
+        cmd('/usr/bin/systemctl','disable',MONITOR_TIMER,timeout=30,check=False)
+
+
 def remove_new_system_files(added):
     """Rollback of files not present in the pre-update snapshot.
 
@@ -166,6 +202,9 @@ def install(tag, package, manifest, signature):
     staged=None
     old_public=None
     system_added=[]
+    monitoring_attempted=False
+    monitor_was_enabled=False
+    monitor_was_active=False
     before=cmd('/usr/bin/systemctl','is-active','mcbedrock.service',check=False).stdout.strip()
     try:
         paths=[]
@@ -245,6 +284,13 @@ def install(tag, package, manifest, signature):
         (PANEL/'VERSION').write_text(tag[1:]+'\n')
         os.chown(PANEL/'VERSION',0,0)
         os.chmod(PANEL/'VERSION',0o644)
+        # Reject partial monitoring bundles before any live file is replaced.
+        needs_monitoring = monitoring_install_required(plan)
+        if needs_monitoring:
+            monitor_was_enabled=cmd('/usr/bin/systemctl','is-enabled',MONITOR_TIMER,
+                                    check=False).returncode==0
+            monitor_was_active=cmd('/usr/bin/systemctl','is-active','--quiet',MONITOR_TIMER,
+                                   check=False).returncode==0
         print('5/7 Installiere geprüfte Systemkomponenten ...',flush=True)
         install_system_files(installer,plan,system_added)
         print('6/7 Führe Funktionstests aus ...',flush=True)
@@ -257,12 +303,27 @@ def install(tag, package, manifest, signature):
         require((PANEL/'VERSION').read_text().strip()==tag[1:], 'Version nach Update stimmt nicht.')
         after=cmd('/usr/bin/systemctl','is-active','mcbedrock.service',check=False).stdout.strip()
         require(before==after,'Minecraft-Status hat sich während des Updates geändert.')
+        if needs_monitoring:
+            monitoring_attempted=True
+            activate_monitoring_timer(plan)
+            require(cmd('/usr/bin/systemctl','is-active','--quiet',MONITOR_TIMER,
+                        check=False).returncode==0,
+                    'Monitoring-Timer wurde nicht aktiv')
+            print('Monitoring-Timer nach abgeschlossenem Funktionstest aktiviert.',flush=True)
         print('7/7 Update erfolgreich: '+old_version+' -> '+tag[1:])
         print('Snapshot für manuellen Rücksprung: '+snapshot)
         print('Minecraft-Dienststatus unverändert: '+(after or 'nicht vorhanden'))
         shutil.rmtree(old_public,ignore_errors=True)
         modified=False
     except BaseException as exc:
+        # Disable newly activated timer before restoring systemd units.
+        if monitoring_attempted:
+            try:
+                rollback_monitoring_timer(monitoring_attempted,
+                                          monitor_was_enabled,monitor_was_active)
+            except BaseException as timer_exc:
+                print('WARNUNG: Monitoring-Timer-Rollback fehlgeschlagen: '+str(timer_exc),
+                      file=sys.stderr,flush=True)
         print('UPDATE-FEHLER: '+str(exc),file=sys.stderr,flush=True)
         if modified and snapshot:
             print('ROLLBACK: Stelle Snapshot '+snapshot+' wieder her ...',flush=True)
