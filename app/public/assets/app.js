@@ -109,13 +109,19 @@ function drawMonitorChart(canvas,points,key,unit,metric){
  const valid=values.filter(v=>v!==null);
  c.font='12px system-ui,sans-serif';c.fillStyle=dark;
  if(!valid.length){c.fillText('Noch keine Messwerte verfügbar',left,Math.round(height/2));return}
- const max=Math.max(metric==='players'?1:metric==='cpu'?10:0.25,...valid.map(v=>metric==='ram'?v/1073741824:v));
- const ceiling=metric==='players'?Math.ceil(max):Math.ceil(max*1.18*10)/10;
+ const numericValid=valid.map(v=>metric==='ram'?v/1073741824:v);
+ const observedMax=Math.max(...numericValid);
+ const ceiling=metric==='players'?Math.max(1,Math.ceil(observedMax)):Math.max(metric==='cpu'?1:0.1,Math.ceil(observedMax*1.3*10)/10);
+ const steps=metric==='players'?Math.min(4,Math.ceil(ceiling)):4;
  const yFor=v=>top+plotH-(metric==='ram'?v/1073741824:v)/ceiling*plotH;
  c.globalAlpha=.23;c.strokeStyle=dark;c.lineWidth=1;
- for(let i=0;i<=4;i++){const y=top+plotH*i/4;c.beginPath();c.moveTo(left,y);c.lineTo(width-right,y);c.stroke()}
+ for(let i=0;i<=steps;i++){const y=top+plotH*i/steps;c.beginPath();c.moveTo(left,y);c.lineTo(width-right,y);c.stroke()}
  c.globalAlpha=.85;c.fillStyle=dark;
- for(let i=0;i<=4;i++){const v=ceiling*(4-i)/4;c.fillText((metric==='players'?v.toFixed(0):v.toFixed(1)),2,top+plotH*i/4+4)}
+ for(let i=0;i<=steps;i++){
+  const v=ceiling*(steps-i)/steps;
+  const label=metric==='players'?v.toLocaleString('de-DE',{maximumFractionDigits:0}):v.toLocaleString('de-DE',{maximumFractionDigits:1});
+  c.fillText(label,2,top+plotH*i/steps+4);
+ }
  if(points.length>0){const tickCount=Math.min(4,points.length-1);for(let i=0;i<=tickCount;i++){const idx=Math.round(i*(points.length-1)/Math.max(1,tickCount));const ts=points[idx].ts;const label=new Date(ts*1000).toLocaleString('de-DE',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});const x=left+(idx/Math.max(1,points.length-1))*plotW;c.fillText(label,Math.max(left,Math.min(width-95,x-28)),height-6)}}
  c.globalAlpha=1;c.strokeStyle=color;c.lineWidth=2.2;c.lineJoin='round';c.lineCap='round';
  let open=false;
