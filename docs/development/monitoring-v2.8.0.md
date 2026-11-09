@@ -61,6 +61,22 @@ Wenn `CPUUsageNSec` oder `MemoryCurrent` nicht verfügbar sind, zeigt der Protot
 
 Die auf v2.7.1 **installierte** Signatur-Update-Allowlist kann die neuen systemd-Units und den neuen Helper **noch nicht** installieren. Eine signierte 2.8.0-Veröffentlichung darf deshalb nicht als einfaches Ein-Klick-Upgrade beworben werden, bevor ein vertrauenswürdiger Bootstrap-/Installerpfad bestätigt ist. Ein späteres 2.8.x-Release kann die erweiterte Allowlist nutzen, nachdem der neue System-Planer installiert wurde. **Nicht eigenmächtig die Root-Sicherheits-Allowlist im Produktivsystem aufweiten.**
 
+## UI-Verbesserungen nach dem ersten Livetest (9. November 2026)
+
+Der erste Livetest lieferte 54 Messungen innerhalb einer Stunde: **42 bestätigte Nullwerte** für die Spielerzahl, **12 fehlgeschlagene SCREEN-Abfragen** (`null`) und **keinen Wert über null**. Es war laut Betreiber tatsächlich niemand online. Null ist daher ein korrekter Messwert, `null` eine echte Abfragelücke, die auch künftig nicht zu 0 umgedeutet wird.
+
+Die Monitoring-Grafiken wurden um folgende Funktionen erweitert:
+
+- Gemeinsames, festes Zeitraster und identische X-Achsen-Beschriftungen für CPU, RAM und Spieler.
+- Mauszeiger/Touch auf der Grafik zeigt den ausgewählten Zeitstempel und Wert an; bei aggregierten Zeiträumen wird auf Mittelwerte hingewiesen.
+- Synchronisierter vertikaler Cursor über alle drei Grafiken, sodass Werte zu derselben Zeit verglichen werden können.
+- Tastatursteuerung für fokussierbare Grafiken: `Pfeil links/rechts`, `Pos1`, `Ende` und `Esc`.
+- Minimum, Mittelwert und Maximum je Grafik über gültige aggregierte Intervallwerte; Intervallwerte ohne Daten werden ausgeschlossen und als fehlend bezeichnet.
+- Sowohl `0 Spieler` als auch `Keine Messung` und `Wert nicht verfügbar` werden korrekt unterschieden.
+- Reine Frontend-Erweiterung, **keine Änderung an den gespeicherten SQLite-Daten**.
+
+Die unabhängigen Node-Tests in `tests/test_monitoring_ui.cjs` prüfen Statistikwerte, Darstellung von 0 und NULL, die UI-Elemente und Maus-/Tastatur-Verknüpfungen.
+
 ## Offene Testpunkte
 
 - [ ] Erster manueller Bootstrap auf dem isolierten Testcontainer
