@@ -89,46 +89,164 @@ async function status(){try{
  }catch(e){if(e.message==='Nicht angemeldet'){$('app').hidden=true;$('login').hidden=false;return;}showNotice(e.message,true)}
 }
 // Monitoring consumes only bounded, aggregated server metrics. No external chart libraries.
-let monitoringBusy=false, monitoringPoints=[], monitoringWindow='24h';
+// Monitoring charts use the same time grid for all metrics. No third-party code.
+let monitoringBusy=false, monitoringPoints=[], monitoringWindow='24h',monitorHoverIndex=null,monitorHoverMetric=null;
+const MONITOR_PLOT={left:50,right:16,top:16,bottom:38,height:234};
 const monitorDefinitions=[
- ['monitorCpuChart','cpu_pct','%','cpu'],
- ['monitorRamChart','ram_bytes','GiB','ram'],
- ['monitorPlayersChart','players','Spieler','players']
+ {id:'monitorCpuChart',key:'cpu_pct',kind:'cpu',summary:'monitorCpuSummary',tooltip:'monitorCpuTooltip'},
+ {id:'monitorRamChart',key:'ram_bytes',kind:'ram',summary:'monitorRamSummary',tooltip:'monitorRamTooltip'},
+ {id:'monitorPlayersChart',key:'players',kind:'players',summary:'monitorPlayersSummary',tooltip:'monitorPlayersTooltip'}
 ];
-function drawMonitorChart(canvas,points,key,unit,metric){
- const box=canvas.getBoundingClientRect();
- const width=Math.max(240,Math.round(box.width)),height=220;
- const scale=Math.max(1,Math.min(2,window.devicePixelRatio||1));
- canvas.width=Math.round(width*scale);canvas.height=height*scale;
- const c=canvas.getContext('2d');if(!c)return;
- c.scale(scale,scale);c.clearRect(0,0,width,height);
- const dark=getComputedStyle(document.body).color;
- const color=metric==='cpu'?'#73db91':metric==='ram'?'#66b9ea':'#dfb36e';
- const left=43,right=12,top=13,bottom=29,plotW=width-left-right,plotH=height-top-bottom;
- const values=points.map(p=>Number.isFinite(p[key])?p[key]:null);
+const monitorUnitValue=(value,kind)=>kind==='ram'?value/1073741824:value;
+const monitorFormat=(value,kind)=>{
+ if(!Number.isFinite(value))return '–';
+ const n=monitorUnitValue(value,kind);
+ return n.toLocaleString('de-DE',{minimumFractionDigits:kind==='players'?0:2,maximumFractionDigits:kind==='players'?1:2})+(kind==='cpu'?' %':kind==='ram'?' GiB':'');
+};
+const monitorDate=(ts)=>new Date(ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+function monitorStats(points,key){
+ const values=points.map(p=>p[key]).filter(v=>Number.isFinite(v));
+ if(!values.length)return null;
+ return {min:Math.min(...values),mean:values.reduce((sum,v)=>sum+v,0)/values.length,max:Math.max(...values),count:values.length};
+}
+function updateMonitorSummaries(){
+ for(const def of monitorDefinitions){
+  const stats=monitorStats(monitoringPoints,def.key);
+  const unknown=monitoringPoints.filter(p=>p.samples>0&&!Number.isFinite(p[def.key])).length;
+  txt(def.summary,stats
+    ?'Min '+monitorFormat(stats.min,def.kind)+' · Ø '+monitorFormat(stats.mean,def.kind)+' · Max '+monitorFormat(stats.max,def.kind)+(unknown?' · '+unknown+' ohne Wert':'')
+    :'Keine gültigen Messwerte im Zeitraum'+(unknown?' · '+unknown+' ohne Wert':''));
+ }
+}
+function monitorX(index,total,width){
+ return MONITOR_PLOT.left+index/Math.max(1,total-1)*(width-MONITOR_PLOT.left-MONITOR_PLOT.right);
+}
+function monitorChartColor(kind){return kind==='cpu'?'#73db91':kind==='ram'?'#66b9ea':'#dfb36e'}
+function drawMonitorChart(canvas,points,def){
+ const rect=canvas.getBoundingClientRect();
+ const width=Math.max(245,Math.round(rect.width)),height=MONITOR_PLOT.height;
+ const pixelRatio=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+ canvas.width=Math.round(width*pixelRatio);canvas.height=height*pixelRatio;
+ const ctx=canvas.getContext('2d');if(!ctx)return;
+ ctx.scale(pixelRatio,pixelRatio);ctx.clearRect(0,0,width,height);
+ const {left,right,top,bottom}=MONITOR_PLOT,plotH=height-top-bottom;
+ const color=monitorChartColor(def.kind);
+ const foreground=getComputedStyle(document.body).color;
+ const values=points.map(p=>Number.isFinite(p[def.key])?p[def.key]:null);
  const valid=values.filter(v=>v!==null);
- c.font='12px system-ui,sans-serif';c.fillStyle=dark;
- if(!valid.length){c.fillText('Noch keine Messwerte verfügbar',left,Math.round(height/2));return}
- const numericValid=valid.map(v=>metric==='ram'?v/1073741824:v);
- const observedMax=Math.max(...numericValid);
- const ceiling=metric==='players'?Math.max(1,Math.ceil(observedMax)):Math.max(metric==='cpu'?1:0.1,Math.ceil(observedMax*1.3*10)/10);
- const steps=metric==='players'?Math.min(4,Math.ceil(ceiling)):4;
- const yFor=v=>top+plotH-(metric==='ram'?v/1073741824:v)/ceiling*plotH;
- c.globalAlpha=.23;c.strokeStyle=dark;c.lineWidth=1;
- for(let i=0;i<=steps;i++){const y=top+plotH*i/steps;c.beginPath();c.moveTo(left,y);c.lineTo(width-right,y);c.stroke()}
- c.globalAlpha=.85;c.fillStyle=dark;
+ const observedMax=valid.length?Math.max(...valid.map(v=>monitorUnitValue(v,def.kind))):0;
+ const ceiling=def.kind==='players'?Math.max(1,Math.ceil(observedMax)):
+    Math.max(def.kind==='cpu'?1:0.1,Math.ceil(observedMax*1.25*10)/10);
+ const steps=def.kind==='players'?Math.min(4,Math.ceil(ceiling)):4;
+ const yFor=value=>top+plotH-monitorUnitValue(value,def.kind)/ceiling*plotH;
+ ctx.font='12px system-ui,sans-serif';ctx.fillStyle=foreground;
+ ctx.globalAlpha=.22;ctx.strokeStyle=foreground;ctx.lineWidth=1;
+ for(let i=0;i<=steps;i++){
+  const y=top+plotH*i/steps;
+  ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(width-right,y);ctx.stroke();
+ }
+ ctx.globalAlpha=.8;ctx.fillStyle=foreground;
  for(let i=0;i<=steps;i++){
   const v=ceiling*(steps-i)/steps;
-  const label=metric==='players'?v.toLocaleString('de-DE',{maximumFractionDigits:0}):v.toLocaleString('de-DE',{maximumFractionDigits:1});
-  c.fillText(label,2,top+plotH*i/steps+4);
+  const label=v.toLocaleString('de-DE',{maximumFractionDigits:def.kind==='players'?0:2});
+  ctx.fillText(label,3,top+plotH*i/steps+4);
  }
- if(points.length>0){const tickCount=Math.min(4,points.length-1);for(let i=0;i<=tickCount;i++){const idx=Math.round(i*(points.length-1)/Math.max(1,tickCount));const ts=points[idx].ts;const label=new Date(ts*1000).toLocaleString('de-DE',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});const x=left+(idx/Math.max(1,points.length-1))*plotW;c.fillText(label,Math.max(left,Math.min(width-95,x-28)),height-6)}}
- c.globalAlpha=1;c.strokeStyle=color;c.lineWidth=2.2;c.lineJoin='round';c.lineCap='round';
- let open=false;
- values.forEach((v,i)=>{if(v===null){open=false;return}const x=left+(i/Math.max(1,values.length-1))*plotW,y=yFor(v);if(!open){c.beginPath();c.moveTo(x,y);open=true}else c.lineTo(x,y);const next=values[i+1];if(next===null||i===values.length-1){c.stroke();open=false}});
+ // The fixed-size buckets returned by the API align across all three plots.
+ // Draw the same four timestamps, at the same X positions in every chart.
+ const tickCount=Math.min(3,Math.max(0,points.length-1));
+ ctx.font='11px system-ui,sans-serif';
+ for(let i=0;i<=tickCount;i++){
+  const index=Math.round(i*(points.length-1)/Math.max(1,tickCount));
+  const point=points[index];if(!point)continue;
+  const label=new Date(point.ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const x=monitorX(index,points.length,width);
+  const size=ctx.measureText(label).width;
+  ctx.fillText(label,Math.max(left,Math.min(width-right-size,x-size/2)),height-9);
+ }
+ if(!valid.length){
+  ctx.globalAlpha=1;ctx.font='13px system-ui,sans-serif';
+  ctx.fillText('Keine gültigen Messwerte im Zeitraum',left+6,top+plotH/2);
+ }else{
+  ctx.globalAlpha=1;ctx.lineWidth=2.2;ctx.strokeStyle=color;ctx.lineCap='round';ctx.lineJoin='round';
+  let segment=false;
+  values.forEach((value,i)=>{
+   if(value===null){if(segment){ctx.stroke();segment=false}return}
+   const x=monitorX(i,values.length,width),y=yFor(value);
+   if(!segment){ctx.beginPath();ctx.moveTo(x,y);segment=true}
+   else ctx.lineTo(x,y);
+  });
+  if(segment)ctx.stroke();
+  // Isolated valid points must remain visible even without a connecting line.
+  values.forEach((value,i)=>{
+   if(value===null || (values[i-1]!==null && values[i+1]!==null))return;
+   ctx.beginPath();ctx.fillStyle=color;
+   ctx.arc(monitorX(i,values.length,width),yFor(value),2.5,0,Math.PI*2);ctx.fill();
+  });
+ }
+ if(Number.isInteger(monitorHoverIndex)&&points[monitorHoverIndex]){
+  const point=points[monitorHoverIndex],x=monitorX(monitorHoverIndex,points.length,width);
+  ctx.globalAlpha=.6;ctx.lineWidth=1;ctx.strokeStyle=foreground;
+  ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,height-bottom);ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+  const value=values[monitorHoverIndex];
+  if(value!==null){
+   ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,yFor(value),4,0,Math.PI*2);ctx.fill();
+   ctx.strokeStyle=foreground;ctx.lineWidth=1.1;ctx.stroke();
+  }
+ }
 }
 function redrawMonitoring(){
- for(const [id,key,unit,metric] of monitorDefinitions)drawMonitorChart($(id),monitoringPoints,key,unit,metric);
+ for(const def of monitorDefinitions)drawMonitorChart($(def.id),monitoringPoints,def);
+}
+function monitorTooltip(){
+ for(const def of monitorDefinitions){
+  const tooltip=$(def.tooltip);
+  if(monitorHoverMetric!==def.kind||!Number.isInteger(monitorHoverIndex)||!monitoringPoints[monitorHoverIndex]){
+   tooltip.hidden=true;continue;
+  }
+  const p=monitoringPoints[monitorHoverIndex];
+  const value=Number.isFinite(p[def.key])?monitorFormat(p[def.key],def.kind):
+    p.samples===0?'Keine Messung':'Wert nicht verfügbar';
+  const aggregate=p.samples>1?' · Ø aus '+p.samples+' Messungen':'';
+  tooltip.textContent=monitorDate(p.ts)+' · '+value+aggregate;
+  const canvas=$(def.id),width=canvas.getBoundingClientRect().width;
+  const x=monitorX(monitorHoverIndex,monitoringPoints.length,width);
+  tooltip.style.left=Math.max(8,Math.min(width-240,x-110))+'px';
+  tooltip.hidden=false;
+ }
+}
+function setMonitorHover(index,kind){
+ monitorHoverIndex=index;monitorHoverMetric=kind;
+ redrawMonitoring();monitorTooltip();
+}
+function clearMonitorHover(){
+ if(monitorHoverIndex===null)return;
+ monitorHoverIndex=null;monitorHoverMetric=null;
+ redrawMonitoring();monitorTooltip();
+}
+for(const def of monitorDefinitions){
+ const canvas=$(def.id);
+ const hoverAt=e=>{
+  if(!monitoringPoints.length)return;
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const progress=Math.max(0,Math.min(1,(x-MONITOR_PLOT.left)/Math.max(1,rect.width-MONITOR_PLOT.left-MONITOR_PLOT.right)));
+  const index=Math.round(progress*(monitoringPoints.length-1));
+  setMonitorHover(index,def.kind);
+ };
+ canvas.addEventListener('pointermove',hoverAt);
+ canvas.addEventListener('pointerdown',hoverAt);
+ canvas.addEventListener('pointerleave',clearMonitorHover);
+ canvas.addEventListener('blur',clearMonitorHover);
+ canvas.addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key))return;
+  e.preventDefault();
+  if(e.key==='Escape'){clearMonitorHover();return}
+  if(!monitoringPoints.length)return;
+  const index=e.key==='Home'?0:e.key==='End'?monitoringPoints.length-1:
+    Math.max(0,Math.min(monitoringPoints.length-1,(monitorHoverIndex??0)+(e.key==='ArrowLeft'?-1:1)));
+  setMonitorHover(index,def.kind);
+ });
 }
 async function loadMonitoring(){
  if(monitoringBusy)return;
@@ -137,6 +255,7 @@ async function loadMonitoring(){
   const d=await api('monitor-history&window='+encodeURIComponent(monitoringWindow));
   if(!Array.isArray(d.points)||d.points.length>450)throw Error('Ungültige Monitoring-Antwort');
   monitoringPoints=d.points;
+  monitorHoverIndex=null;monitorHoverMetric=null;
   const latest=d.latest;
   const fresh=latest && Number.isInteger(latest.ts) && Date.now()/1000-latest.ts<180;
   txt('monitorCpu',fresh && Number.isFinite(latest.cpu_pct)?latest.cpu_pct.toLocaleString('de-DE',{maximumFractionDigits:1})+' %':'–');
@@ -144,13 +263,14 @@ async function loadMonitoring(){
   txt('monitorPlayers',fresh && Number.isFinite(latest.players)?String(latest.players):'–');
   txt('monitorTime',latest?new Date(latest.ts*1000).toLocaleTimeString('de-DE'):'–');
   txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+' Messungen · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
-  redrawMonitoring();
- }catch(e){monitoringPoints=[];redrawMonitoring();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
+  updateMonitorSummaries();
+  redrawMonitoring();monitorTooltip();
+ }catch(e){monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
  finally{monitoringBusy=false}
 }
 $('monitorReload').addEventListener('click',loadMonitoring);
 $('monitorWindow').addEventListener('change',e=>{monitoringWindow=e.target.value;loadMonitoring()});
-window.addEventListener('resize',()=>{if(!$('monitor').hidden)redrawMonitoring()});
+window.addEventListener('resize',()=>{if(!$('monitor').hidden){redrawMonitoring();monitorTooltip()}});
 setInterval(()=>{if(!$('app').hidden&&!$('monitor').hidden)loadMonitoring()},60000);
 
 async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs()}async function action(name){
