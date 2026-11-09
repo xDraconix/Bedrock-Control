@@ -121,6 +121,20 @@ function updateMonitorSummaries(){
 function monitorX(index,total,width){
  return MONITOR_PLOT.left+index/Math.max(1,total-1)*(width-MONITOR_PLOT.left-MONITOR_PLOT.right);
 }
+function monitorDisplayValues(points,key){
+ // Display-only interpolation of exactly one missing time bucket. No edits to
+ // raw SQLite data, current status, or Min/Mean/Max statistics.
+ const result=points.map(p=>Number.isFinite(p[key])?p[key]:null);
+ for(let i=1;i<result.length-1;i++){
+  if(result[i]!==null)continue;
+  const prev=points[i-1],now=points[i],next=points[i+1];
+  if(!Number.isFinite(prev[key])||!Number.isFinite(next[key]))continue;
+  // Require a uniform time grid; do not bridge missing days or discontinuities.
+  if(!Number.isFinite(now.ts)||now.ts-prev.ts!==next.ts-now.ts||now.ts<=prev.ts)continue;
+  result[i]=(prev[key]+next[key])/2;
+ }
+ return result;
+}
 function monitorChartColor(kind){return kind==='cpu'?'#73db91':kind==='ram'?'#66b9ea':'#dfb36e'}
 function drawMonitorChart(canvas,points,def){
  const rect=canvas.getBoundingClientRect();
@@ -132,7 +146,7 @@ function drawMonitorChart(canvas,points,def){
  const {left,right,top,bottom}=MONITOR_PLOT,plotH=height-top-bottom;
  const color=monitorChartColor(def.kind);
  const foreground=getComputedStyle(document.body).color;
- const values=points.map(p=>Number.isFinite(p[def.key])?p[def.key]:null);
+ const values=monitorDisplayValues(points,def.key);
  const valid=values.filter(v=>v!==null);
  const observedMax=valid.length?Math.max(...valid.map(v=>monitorUnitValue(v,def.kind))):0;
  const ceiling=def.kind==='players'?Math.max(1,Math.ceil(observedMax)):
@@ -189,8 +203,10 @@ function drawMonitorChart(canvas,points,def){
   ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,height-bottom);ctx.stroke();
   ctx.setLineDash([]);ctx.globalAlpha=1;
   const value=values[monitorHoverIndex];
+  const interpolated=value!==null&&!Number.isFinite(point[def.key]);
   if(value!==null){
-   ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,yFor(value),4,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle=interpolated?'#e5d19c':color;
+   ctx.beginPath();ctx.arc(x,yFor(value),4,0,Math.PI*2);ctx.fill();
    ctx.strokeStyle=foreground;ctx.lineWidth=1.1;ctx.stroke();
   }
  }
@@ -205,7 +221,9 @@ function monitorTooltip(){
    tooltip.hidden=true;continue;
   }
   const p=monitoringPoints[monitorHoverIndex];
+  const estimate=monitorDisplayValues(monitoringPoints,def.key)[monitorHoverIndex];
   const value=Number.isFinite(p[def.key])?monitorFormat(p[def.key],def.kind):
+    Number.isFinite(estimate)?'≈ '+monitorFormat(estimate,def.kind)+' (geschätzt)':
     p.samples===0?'Keine Messung':'Wert nicht verfügbar';
   const aggregate=p.samples>1?' · Ø aus '+p.samples+' Messungen':'';
   tooltip.textContent=monitorDate(p.ts)+' · '+value+aggregate;
