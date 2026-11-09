@@ -63,5 +63,5 @@ jobs:
       - name: Build and validate unsigned installer ZIP
         run: |
           bash release-tools/build-release.sh
-          unzip -tq dist/Bedrock-Control-PRO-v2.7.1-Release.zip
-          unzip -p dist/Bedrock-Control-PRO-v2.7.1-Release.zip bedrock-control-pro-2.7.1-installer/VERSION | grep -qx 2.7.1
+          unzip -tq dist/Bedrock-Control-PRO-v2.7.2-Release.zip
+          unzip -p dist/Bedrock-Control-PRO-v2.7.2-Release.zip bedrock-control-pro-2.7.2-installer/VERSION | grep -qx 2.7.2
