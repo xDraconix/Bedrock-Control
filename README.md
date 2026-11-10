@@ -12,9 +12,24 @@ Neu: Online-Spielernamen über die Bedrock-Konsole automatisch anzeigen; Allowli
 
 Der neue Menüpunkt **Live-Monitoring** bietet historische Diagramme für die Minecraft-Dienst-CPU (100 % = ein belegter CPU-Kern), den Dienst-RAM und die Zahl der Online-Spieler. Ein root-verwalteter systemd-Timer erhebt alle 60 Sekunden eine Messung, auch wenn der Browser geschlossen bleibt. Die Daten liegen in einer lokal geschützten SQLite-Datei unter `/var/lib/bedrock-control-pro/monitoring.sqlite3` und werden nach 30 Tagen automatisch entfernt. Die Anzeige bietet 1h, 6h, 24h, 7d und 30d. Messwerte können ausfallen; nicht verfügbare Werte werden **nicht als 0** dargestellt.
 
-**Wichtig für ein späteres Upgrade von v2.7.1:** Das neue Monitoring benötigt einen zusätzlichen Root-Helper sowie zwei systemd-Dateien. Der **bereits installierte** v2.7.1-System-Updater erlaubt diese neuen Zielpfade noch nicht. Ein reines Ein-Klick-Webupdate auf 2.8.0 würde daher diese Systemkomponenten nicht zuverlässig installieren. Vor einer Stable-Freigabe ist hierfür ein gesonderter, verifizierter Erstinstallationsschritt vorgesehen. Bitte aktuell **nur auf dem Testcontainer** testen; nicht auf dem Produktivserver installieren.
+**Wichtig für ein späteres Upgrade von v2.7.1:** Das neue Monitoring benötigt einen zusätzlichen Root-Helper sowie zwei systemd-Dateien. Der **bereits installierte** v2.7.1-System-Updater erlaubt diese neuen Zielpfade noch nicht. Ein reines Ein-Klick-Webupdate auf 2.8.0 würde daher diese Systemkomponenten nicht zuverlässig installieren. Für das signierte Upgrade muss zuerst die Update-Brücke v2.7.2 installiert werden. Anschließend können die drei Monitoring-Komponenten über den erweiterten, signierten Update-Mechanismus von v2.8.0 installiert werden. Vor der Stable-Freigabe muss der vollständige Upgrade- und Rollback-Pfad erfolgreich getestet werden. Bitte aktuell **nur auf dem Testcontainer** testen; nicht auf dem Produktivserver installieren.
 
 Details: [Monitoring-Entwicklungsnotizen](docs/development/monitoring-v2.8.0.md).
+
+## Sicherheits- und Update-Bruecke 2.7.2
+
+Die Version 2.7.2 erweitert den signierten Update-Mechanismus
+um die drei fest definierten Monitoring-Komponenten:
+
+- `bedrock-monitor-manager`
+- `bedrock-monitor.service`
+- `bedrock-monitor.timer`
+
+Die Bruecke installiert selbst noch kein Monitoring.
+Vor einem signierten Upgrade von v2.7.1 auf v2.8.0
+muss zuerst v2.7.2 installiert werden.
+
+Details: [Release Notes v2.7.2](docs/releases/v2.7.2.md).
 
 ## Fehlerbehebung in 2.7.1
 
