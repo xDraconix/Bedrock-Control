@@ -235,7 +235,7 @@ if($api!==null) {
      '--header','X-GitHub-Api-Version: 2022-11-28',
      '--user-agent','DracoRock-Control/2.8.1', $url]);
    if($r['code']!==0)respond(['error'=>'GitHub Release-API ist momentan nicht erreichbar.'],502);
-   $split=strrpos($r['out'],"\\n");
+   $split=strrpos($r['out'],"\n");
    if($split===false)respond(['error'=>'Ungültiger GitHub-HTTP-Status.'],502);
    $status=substr($r['out'],$split+1);
    if($status==='404' && $repo===$repositories[0])continue;
