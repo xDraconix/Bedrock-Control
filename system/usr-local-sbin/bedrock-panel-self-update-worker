@@ -10,12 +10,13 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import urllib.error
 from pathlib import Path
 
-API_STABLE='https://api.github.com/repos/xDraconix/Bedrock-Control/releases/latest'
-API_TEST='https://api.github.com/repos/xDraconix/Bedrock-Control/releases?per_page=30'
+# The new repository is preferred once it exists; the old one remains the
+# supported source until GitHub is renamed. Never follow API redirects.
+REPOSITORIES=('xDraconix/DracoRock-Control','xDraconix/Bedrock-Control')
 CHANNEL_FILE=Path('/etc/bedrock-control-pro/update-channel')
-OWNER_PREFIX='https://github.com/xDraconix/Bedrock-Control/releases/download/'
 STAGING=Path('/var/lib/bedrock-panel-update-staging')
 KEY=Path('/etc/bedrock-control-pro/trusted-release-key.pem')
 PANEL=Path('/opt/bedrock-control-pro')
@@ -30,38 +31,55 @@ def run(*args, timeout=120):
     if result.returncode: fail('Befehl fehlgeschlagen: '+str(args[0]))
 
 def fetch_release(channel):
-    api=API_TEST if channel=='test' else API_STABLE
-    req=urllib.request.Request(api,headers={
-        'Accept':'application/vnd.github+json',
-        'User-Agent':'Bedrock-Control-PRO/2.5.3',
-        'X-GitHub-Api-Version':'2022-11-28'})
-    with urllib.request.urlopen(req,timeout=15) as response:
-        if response.url!=api: fail('GitHub API-Weiterleitung nicht erlaubt')
-        raw=response.read(262145)
-    if len(raw)>262144: fail('GitHub-Antwort zu groß')
-    response=json.loads(raw)
-    if channel=='test':
-        if not isinstance(response,list): fail('Ungültige GitHub Release-Liste')
-        candidates=[r for r in response if isinstance(r,dict) and r.get('draft') is False
-            and r.get('prerelease') is True and isinstance(r.get('tag_name'),str)
-            and re.fullmatch(r'v\d+\.\d+\.\d+',r['tag_name'])]
-        if not candidates: fail('Keine veröffentlichten Pre-Releases gefunden')
-        release=max(candidates,key=lambda r:tuple(map(int,r['tag_name'][1:].split('.'))))
-    else:
-        release=response
-        if not isinstance(release,dict) or release.get('draft') is not False or release.get('prerelease') is not False:
-            fail('Kein gültiges stabiles Release')
+    release=None
+    source_repo=None
+    for repo in REPOSITORIES:
+        api='https://api.github.com/repos/'+repo+'/releases'
+        api+= '?per_page=30' if channel=='test' else '/latest'
+        req=urllib.request.Request(api,headers={
+            'Accept':'application/vnd.github+json',
+            'User-Agent':'DracoRock-Control/2.8.1',
+            'X-GitHub-Api-Version':'2022-11-28'})
+        # Before GitHub's rename, the DracoRock repository does not exist (404).
+        # Only this condition permits a fallback to the legacy repository.
+        try:
+            with urllib.request.urlopen(req,timeout=15) as response:
+                if response.url!=api: fail('GitHub API-Weiterleitung nicht erlaubt')
+                raw=response.read(262145)
+        except urllib.error.HTTPError as ex:
+            if ex.code==404 and repo==REPOSITORIES[0]:
+                continue
+            raise
+        if len(raw)>262144: fail('GitHub-Antwort zu groß')
+        response=json.loads(raw)
+        source_repo=repo
+        if channel=='test':
+            if not isinstance(response,list): fail('Ungültige GitHub Release-Liste')
+            candidates=[r for r in response if isinstance(r,dict) and r.get('draft') is False
+                and r.get('prerelease') is True and isinstance(r.get('tag_name'),str)
+                and re.fullmatch(r'v\\d+\\.\\d+\\.\\d+',r['tag_name'])]
+            if not candidates: fail('Keine veröffentlichten Pre-Releases gefunden')
+            release=max(candidates,key=lambda r:tuple(map(int,r['tag_name'][1:].split('.'))))
+        else:
+            release=response
+            if not isinstance(release,dict) or release.get('draft') is not False or release.get('prerelease') is not False:
+                fail('Kein gültiges stabiles Release')
+        break
+    if source_repo is None: fail('Keine vertrauenswürdige GitHub-Release-Quelle gefunden')
     tag=release.get('tag_name')
-    if not isinstance(tag,str) or not re.fullmatch(r'v\d+\.\d+\.\d+',tag):
+    if not isinstance(tag,str) or not re.fullmatch(r'v\\d+\\.\\d+\\.\\d+',tag):
         fail('Ungültiger Release-Tag')
+    # v2.8.1 keeps the legacy signed payload format, including the archive
+    # name and signed manifest. Changing these requires a separate migration.
     names=[f'Bedrock-Control-PRO-{tag}-Release.zip']
     names.extend([names[0]+'.manifest',names[0]+'.manifest.sig'])
+    owner_prefix='https://github.com/'+source_repo+'/releases/download/'
     assets={}
     for asset in release.get('assets',[]):
         if not isinstance(asset,dict):continue
         name,url=asset.get('name'),asset.get('browser_download_url')
         if name not in names or not isinstance(url,str):continue
-        if url!=OWNER_PREFIX+tag+'/'+name:continue
+        if url!=owner_prefix+tag+'/'+name:continue
         if name in assets:fail('Doppeltes Release-Asset')
         if not isinstance(asset.get('size'),int) or asset['size']<=0 or asset['size']>(MAX_ZIP if name.endswith('.zip') else 200000):fail('Unzulässige Asset-Größe')
         assets[name]=(url,asset['size'])
