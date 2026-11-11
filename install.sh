@@ -172,6 +172,10 @@ elif [[ -L "$CHANNEL_CONFIG" || ! -f "$CHANNEL_CONFIG" || "$(stat -c %u "$CHANNE
   echo 'FEHLER: Updatekanal-Datei ist nicht sicher eingerichtet.' >&2
   exit 1
 fi
+# Local historical metrics are stored root-only and never inside Minecraft worlds.
+install -d -m 0700 -o root -g root /var/lib/bedrock-control-pro
+install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-monitor.service" /etc/systemd/system/bedrock-monitor.service
+install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-monitor.timer" /etc/systemd/system/bedrock-monitor.timer
 install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-worker" /usr/local/sbin/bedrock-panel-self-update-worker
 install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/bedrock-panel-self-update-control" /usr/local/sbin/bedrock-panel-self-update-control
 install -m 0644 -o root -g root "$ROOT/system/systemd/bedrock-panel-self-update.service" /etc/systemd/system/bedrock-panel-self-update.service
@@ -182,6 +186,9 @@ done
 for file in "$ROOT"/system/usr-local-sbin/bedrock-*; do
   install -m 0755 -o root -g root "$file" "/usr/local/sbin/$(basename "$file")"
 done
+# Start the sampler only after its Python helper and the systemd units exist.
+systemctl daemon-reload
+systemctl enable --now bedrock-monitor.timer
 # Existing installations need the same narrowly scoped ACLs as new web setups.
 if [[ -f "$SERVER/server.properties" ]]; then
   /usr/local/sbin/bedrock-config-access
@@ -242,5 +249,5 @@ if [[ ! -s /opt/bedrock-control-pro/config/password.hash ]]; then
   echo 'Administrator-Passwort jetzt einrichten:'
   php /opt/bedrock-control-pro/set-password.php
 fi
-echo 'Installation abgeschlossen (v2.7.2): http://SERVER-IP:8088/'
+echo 'Installation abgeschlossen (v2.8.0): http://SERVER-IP:8088/'
 echo 'Bestehende Minecraft-Server wurden nicht neu gestartet oder überschrieben. Bei Neuinstallation: Webpanel öffnen und Setup-Assistent verwenden.'

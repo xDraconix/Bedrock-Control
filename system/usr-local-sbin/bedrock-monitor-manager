@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Read-only Bedrock metrics sampler and bounded local SQLite history.
+
+No Minecraft world/config writes. Database is private to root, accessed only
+through the panel's existing authenticated/sudo-controlled API.
+"""
+import json
+import os
+import pathlib
+import sqlite3
+import stat
+import subprocess
+import sys
+import time
+
+DB_DIR = pathlib.Path('/var/lib/bedrock-control-pro')
+DB_FILE = DB_DIR / 'monitoring.sqlite3'
+UNIT = 'mcbedrock.service'
+CGROUP_ROOT = pathlib.Path('/sys/fs/cgroup')
+RETENTION = 30 * 86400
+WINDOWS = {'1h': 3600, '6h': 21600, '24h': 86400, '7d': 604800, '30d': 2592000}
+
+def command(*args, timeout=8):
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+
+def storage():
+    if os.geteuid() != 0:
+        raise ValueError('Monitoring benötigt root')
+    DB_DIR.mkdir(mode=0o700, exist_ok=True)
+    st = DB_DIR.lstat()
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o700:
+        raise ValueError('Unsicheres Monitoring-Verzeichnis')
+    if DB_FILE.exists() or DB_FILE.is_symlink():
+        st = DB_FILE.lstat()
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or stat.S_IMODE(st.st_mode) & 0o077:
+            raise ValueError('Unsichere Monitoring-Datenbank')
+    db = sqlite3.connect(str(DB_FILE), timeout=5)
+    os.chmod(DB_FILE, 0o600)
+    db.execute('PRAGMA busy_timeout=5000')
+    db.execute('CREATE TABLE IF NOT EXISTS samples ('
+               'ts INTEGER PRIMARY KEY, online INTEGER NOT NULL, '
+               'cpu_ns INTEGER, cpu_pct REAL, ram_bytes INTEGER, players INTEGER)')
+    db.execute('CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(ts)')
+    db.commit()
+    return db
+
+def cgroup_value(group, field):
+    """Read the exact systemd service cgroup (cgroup v2), never a host total."""
+    if not group or not group.startswith('/') or '..' in group.split('/'):
+        return None
+    if any(ch not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./' for ch in group):
+        return None
+    root = CGROUP_ROOT / group.lstrip('/')
+    path = root / ('cpu.stat' if field == 'cpu_ns' else 'memory.current')
+    if path.is_symlink() or not path.is_file():
+        return None
+    try:
+        contents = path.read_text(encoding='ascii')[:4096]
+        if field == 'cpu_ns':
+            for line in contents.splitlines():
+                parts = line.split()
+                if len(parts)==2 and parts[0]=='usage_usec' and parts[1].isascii() and parts[1].isdigit():
+                    return int(parts[1]) * 1000
+        else:
+            raw=contents.strip()
+            if raw.isascii() and raw.isdigit():
+                return int(raw)
+    except (OSError,UnicodeError,ValueError):
+        return None
+    return None
+
+def service_snapshot():
+    r = command('/usr/bin/systemctl', 'show', UNIT, '--no-pager',
+                '--property=ActiveState,CPUUsageNSec,MemoryCurrent,ControlGroup')
+    if r.returncode:
+        raise ValueError('systemd-Dienststatus nicht lesbar')
+    values = {}
+    for line in r.stdout.splitlines():
+        if '=' in line:
+            key, value = line.split('=', 1)
+            values[key] = value
+    online = values.get('ActiveState') == 'active'
+    def metric(key):
+        raw = values.get(key, '')
+        return int(raw) if raw.isascii() and raw.isdigit() else None
+    if not online:
+        return False, None, None
+    cpu_ns, ram_bytes = metric('CPUUsageNSec'), metric('MemoryCurrent')
+    # CPUAccounting/MemoryAccounting can be off for Debian LXC services.
+    # cgroup v2 provides per-unit counters without enabling those settings.
+    group = values.get('ControlGroup', '')
+    if cpu_ns is None:
+        cpu_ns = cgroup_value(group, 'cpu_ns')
+    if ram_bytes is None:
+        ram_bytes = cgroup_value(group, 'ram_bytes')
+    return True, cpu_ns, ram_bytes
+
+def online_count():
+    """Best-effort fresh Bedrock count; transient SCREEN conflicts are not zero.
+
+    A separate panel request can overlap the timer's SCREEN query. Retry once
+    with a short delay. A failed retry remains NULL rather than fake 0.
+    """
+    for attempt in range(2):
+        try:
+            r = command('/usr/local/sbin/bedrock-console-manager', 'online', timeout=10)
+            if r.returncode == 0:
+                parsed = json.loads(r.stdout)
+                count = parsed.get('count')
+                if type(count) is int and 0 <= count <= 1000 and parsed.get('online') is True:
+                    return count
+        except (ValueError, AttributeError, TypeError, subprocess.TimeoutExpired):
+            pass
+        if attempt == 0:
+            time.sleep(0.65)
+    return None
+
+def take_sample(db, now, online, cpu_ns, ram_bytes, players):
+    """Append a sample with a service-CPU delta; 100%=one fully loaded core."""
+    previous = db.execute('SELECT ts,cpu_ns FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
+    cpu_pct = None
+    if online and cpu_ns is not None and previous is not None:
+        previous_ts, previous_cpu = previous
+        elapsed = now - previous_ts
+        if previous_cpu is not None and 0 < elapsed < 600 and cpu_ns >= previous_cpu:
+            cpu_pct = round((cpu_ns - previous_cpu) / (elapsed * 1e9) * 100, 2)
+            if not 0 <= cpu_pct <= 6400:
+                cpu_pct = None
+    with db:
+        db.execute('INSERT OR REPLACE INTO samples (ts,online,cpu_ns,cpu_pct,ram_bytes,players)'
+                   ' VALUES (?,?,?,?,?,?)',
+                   (now, int(online), cpu_ns, cpu_pct, ram_bytes, players))
+        db.execute('DELETE FROM samples WHERE ts < ?', (now - RETENTION,))
+    return {'ts':now,'online':bool(online),'cpu_pct':cpu_pct,
+            'ram_bytes':ram_bytes,'players':players}
+
+def history(db, window, now):
+    if window not in WINDOWS:
+        raise ValueError('Ungültiges Zeitfenster')
+    cutoff = now - WINDOWS[window]
+    # Fixed time buckets retain gaps if the collector was temporarily stopped.
+    # Even a 30-day response is bounded to at most 450 chart points.
+    bucket = max(60, (WINDOWS[window] + 359) // 360)
+    rows = db.execute(
+        'SELECT (ts / ?) * ? AS bucket,'
+        ' AVG(cpu_pct),AVG(ram_bytes),AVG(players),MAX(online),COUNT(*)'
+        ' FROM samples WHERE ts>=? AND ts<=?'
+        ' GROUP BY bucket ORDER BY bucket ASC LIMIT 450',
+        (bucket,bucket,cutoff,now)).fetchall()
+    known = {ts:{'ts':ts,'cpu_pct':round(cpu,2) if cpu is not None else None,
+                 'ram_bytes':round(ram) if ram is not None else None,
+                 'players':round(players,2) if players is not None else None,
+                 'online':bool(online),'samples':count}
+             for ts,cpu,ram,players,online,count in rows}
+    start = (cutoff // bucket) * bucket
+    end = (now // bucket) * bucket
+    points = [known.get(ts, {'ts':ts,'cpu_pct':None,'ram_bytes':None,
+                            'players':None,'online':None,'samples':0})
+              for ts in range(start,end+1,bucket)]
+    latest = db.execute('SELECT ts,online,cpu_pct,ram_bytes,players FROM samples ORDER BY ts DESC LIMIT 1').fetchone()
+    return {'ok':True,'window':window,'bucket_seconds':bucket,'points':points,
+            'samples_count':sum(p['samples'] for p in points),
+            'latest':dict(zip(('ts','online','cpu_pct','ram_bytes','players'),latest)) if latest else None,
+            'retention_days':30,'interval_seconds':60}
+
+def main():
+    if len(sys.argv) < 2:
+        raise ValueError('Aktion fehlt')
+    action = sys.argv[1]
+    if action == 'sample' and len(sys.argv) == 2:
+        now = int(time.time())
+        online,cpu_ns,ram_bytes = service_snapshot()
+        players = online_count() if online else 0
+        with storage() as db:
+            result = take_sample(db,now,online,cpu_ns,ram_bytes,players)
+        print(json.dumps({'ok':True,**result}))
+    elif action == 'history' and len(sys.argv) == 3:
+        with storage() as db:
+            print(json.dumps(history(db,sys.argv[2],int(time.time()))))
+    else:
+        raise ValueError('Unbekannte Aktion')
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError,ValueError,sqlite3.Error,subprocess.TimeoutExpired) as exc:
+        print(json.dumps({'error':str(exc)}))
+        sys.exit(1)

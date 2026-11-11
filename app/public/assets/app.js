@@ -88,6 +88,209 @@ async function status(){try{
  const p=$('statusPill');p.textContent={online:'● Server online',starting:'● Server startet / NetherNet wartet',offline:'● Server offline',failed:'● Serverfehler'}[state];p.className='pill '+state;
  }catch(e){if(e.message==='Nicht angemeldet'){$('app').hidden=true;$('login').hidden=false;return;}showNotice(e.message,true)}
 }
+// Monitoring consumes only bounded, aggregated server metrics. No external chart libraries.
+// Monitoring charts use the same time grid for all metrics. No third-party code.
+let monitoringBusy=false, monitoringPoints=[], monitoringWindow='24h',monitorHoverIndex=null,monitorHoverMetric=null;
+const MONITOR_PLOT={left:50,right:16,top:16,bottom:38,height:234};
+const monitorDefinitions=[
+ {id:'monitorCpuChart',key:'cpu_pct',kind:'cpu',summary:'monitorCpuSummary',tooltip:'monitorCpuTooltip'},
+ {id:'monitorRamChart',key:'ram_bytes',kind:'ram',summary:'monitorRamSummary',tooltip:'monitorRamTooltip'},
+ {id:'monitorPlayersChart',key:'players',kind:'players',summary:'monitorPlayersSummary',tooltip:'monitorPlayersTooltip'}
+];
+const monitorUnitValue=(value,kind)=>kind==='ram'?value/1073741824:value;
+const monitorFormat=(value,kind)=>{
+ if(!Number.isFinite(value))return '–';
+ const n=monitorUnitValue(value,kind);
+ return n.toLocaleString('de-DE',{minimumFractionDigits:kind==='players'?0:2,maximumFractionDigits:kind==='players'?1:2})+(kind==='cpu'?' %':kind==='ram'?' GiB':'');
+};
+const monitorDate=(ts)=>new Date(ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+function monitorStats(points,key){
+ const values=points.map(p=>p[key]).filter(v=>Number.isFinite(v));
+ if(!values.length)return null;
+ return {min:Math.min(...values),mean:values.reduce((sum,v)=>sum+v,0)/values.length,max:Math.max(...values),count:values.length};
+}
+function updateMonitorSummaries(){
+ for(const def of monitorDefinitions){
+  const stats=monitorStats(monitoringPoints,def.key);
+  const unknown=monitoringPoints.filter(p=>p.samples>0&&!Number.isFinite(p[def.key])).length;
+  txt(def.summary,stats
+    ?'Min '+monitorFormat(stats.min,def.kind)+' · Ø '+monitorFormat(stats.mean,def.kind)+' · Max '+monitorFormat(stats.max,def.kind)+(unknown?' · '+unknown+' ohne Wert':'')
+    :'Keine gültigen Messwerte im Zeitraum'+(unknown?' · '+unknown+' ohne Wert':''));
+ }
+}
+function monitorX(index,total,width){
+ return MONITOR_PLOT.left+index/Math.max(1,total-1)*(width-MONITOR_PLOT.left-MONITOR_PLOT.right);
+}
+function monitorDisplayValues(points,key){
+ // Display-only interpolation of exactly one missing time bucket. No edits to
+ // raw SQLite data, current status, or Min/Mean/Max statistics.
+ const result=points.map(p=>Number.isFinite(p[key])?p[key]:null);
+ for(let i=1;i<result.length-1;i++){
+  if(result[i]!==null)continue;
+  const prev=points[i-1],now=points[i],next=points[i+1];
+  if(!Number.isFinite(prev[key])||!Number.isFinite(next[key]))continue;
+  // Require a uniform time grid; do not bridge missing days or discontinuities.
+  if(!Number.isFinite(now.ts)||now.ts-prev.ts!==next.ts-now.ts||now.ts<=prev.ts)continue;
+  result[i]=(prev[key]+next[key])/2;
+ }
+ return result;
+}
+function monitorChartColor(kind){return kind==='cpu'?'#73db91':kind==='ram'?'#66b9ea':'#dfb36e'}
+function drawMonitorChart(canvas,points,def){
+ const rect=canvas.getBoundingClientRect();
+ const width=Math.max(245,Math.round(rect.width)),height=MONITOR_PLOT.height;
+ const pixelRatio=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+ canvas.width=Math.round(width*pixelRatio);canvas.height=height*pixelRatio;
+ const ctx=canvas.getContext('2d');if(!ctx)return;
+ ctx.scale(pixelRatio,pixelRatio);ctx.clearRect(0,0,width,height);
+ const {left,right,top,bottom}=MONITOR_PLOT,plotH=height-top-bottom;
+ const color=monitorChartColor(def.kind);
+ const foreground=getComputedStyle(document.body).color;
+ const values=monitorDisplayValues(points,def.key);
+ const valid=values.filter(v=>v!==null);
+ const observedMax=valid.length?Math.max(...valid.map(v=>monitorUnitValue(v,def.kind))):0;
+ const ceiling=def.kind==='players'?Math.max(1,Math.ceil(observedMax)):
+    Math.max(def.kind==='cpu'?1:0.1,Math.ceil(observedMax*1.25*10)/10);
+ const steps=def.kind==='players'?Math.min(4,Math.ceil(ceiling)):4;
+ const yFor=value=>top+plotH-monitorUnitValue(value,def.kind)/ceiling*plotH;
+ ctx.font='12px system-ui,sans-serif';ctx.fillStyle=foreground;
+ ctx.globalAlpha=.22;ctx.strokeStyle=foreground;ctx.lineWidth=1;
+ for(let i=0;i<=steps;i++){
+  const y=top+plotH*i/steps;
+  ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(width-right,y);ctx.stroke();
+ }
+ ctx.globalAlpha=.8;ctx.fillStyle=foreground;
+ for(let i=0;i<=steps;i++){
+  const v=ceiling*(steps-i)/steps;
+  const label=v.toLocaleString('de-DE',{maximumFractionDigits:def.kind==='players'?0:2});
+  ctx.fillText(label,3,top+plotH*i/steps+4);
+ }
+ // The fixed-size buckets returned by the API align across all three plots.
+ // Draw the same four timestamps, at the same X positions in every chart.
+ const tickCount=Math.min(3,Math.max(0,points.length-1));
+ ctx.font='11px system-ui,sans-serif';
+ for(let i=0;i<=tickCount;i++){
+  const index=Math.round(i*(points.length-1)/Math.max(1,tickCount));
+  const point=points[index];if(!point)continue;
+  const label=new Date(point.ts*1000).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const x=monitorX(index,points.length,width);
+  const size=ctx.measureText(label).width;
+  ctx.fillText(label,Math.max(left,Math.min(width-right-size,x-size/2)),height-9);
+ }
+ if(!valid.length){
+  ctx.globalAlpha=1;ctx.font='13px system-ui,sans-serif';
+  ctx.fillText('Keine gültigen Messwerte im Zeitraum',left+6,top+plotH/2);
+ }else{
+  ctx.globalAlpha=1;ctx.lineWidth=2.2;ctx.strokeStyle=color;ctx.lineCap='round';ctx.lineJoin='round';
+  let segment=false;
+  values.forEach((value,i)=>{
+   if(value===null){if(segment){ctx.stroke();segment=false}return}
+   const x=monitorX(i,values.length,width),y=yFor(value);
+   if(!segment){ctx.beginPath();ctx.moveTo(x,y);segment=true}
+   else ctx.lineTo(x,y);
+  });
+  if(segment)ctx.stroke();
+  // Isolated valid points must remain visible even without a connecting line.
+  values.forEach((value,i)=>{
+   if(value===null || (values[i-1]!==null && values[i+1]!==null))return;
+   ctx.beginPath();ctx.fillStyle=color;
+   ctx.arc(monitorX(i,values.length,width),yFor(value),2.5,0,Math.PI*2);ctx.fill();
+  });
+ }
+ if(Number.isInteger(monitorHoverIndex)&&points[monitorHoverIndex]){
+  const point=points[monitorHoverIndex],x=monitorX(monitorHoverIndex,points.length,width);
+  ctx.globalAlpha=.6;ctx.lineWidth=1;ctx.strokeStyle=foreground;
+  ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,height-bottom);ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+  const value=values[monitorHoverIndex];
+  const interpolated=value!==null&&!Number.isFinite(point[def.key]);
+  if(value!==null){
+   ctx.fillStyle=interpolated?'#e5d19c':color;
+   ctx.beginPath();ctx.arc(x,yFor(value),4,0,Math.PI*2);ctx.fill();
+   ctx.strokeStyle=foreground;ctx.lineWidth=1.1;ctx.stroke();
+  }
+ }
+}
+function redrawMonitoring(){
+ for(const def of monitorDefinitions)drawMonitorChart($(def.id),monitoringPoints,def);
+}
+function monitorTooltip(){
+ for(const def of monitorDefinitions){
+  const tooltip=$(def.tooltip);
+  if(monitorHoverMetric!==def.kind||!Number.isInteger(monitorHoverIndex)||!monitoringPoints[monitorHoverIndex]){
+   tooltip.hidden=true;continue;
+  }
+  const p=monitoringPoints[monitorHoverIndex];
+  const estimate=monitorDisplayValues(monitoringPoints,def.key)[monitorHoverIndex];
+  const value=Number.isFinite(p[def.key])?monitorFormat(p[def.key],def.kind):
+    Number.isFinite(estimate)?'≈ '+monitorFormat(estimate,def.kind)+' (geschätzt)':
+    p.samples===0?'Keine Messung':'Wert nicht verfügbar';
+  const aggregate=p.samples>1?' · Ø aus '+p.samples+' Messungen':'';
+  tooltip.textContent=monitorDate(p.ts)+' · '+value+aggregate;
+  const canvas=$(def.id),width=canvas.getBoundingClientRect().width;
+  const x=monitorX(monitorHoverIndex,monitoringPoints.length,width);
+  tooltip.style.left=Math.max(8,Math.min(width-240,x-110))+'px';
+  tooltip.hidden=false;
+ }
+}
+function setMonitorHover(index,kind){
+ monitorHoverIndex=index;monitorHoverMetric=kind;
+ redrawMonitoring();monitorTooltip();
+}
+function clearMonitorHover(){
+ if(monitorHoverIndex===null)return;
+ monitorHoverIndex=null;monitorHoverMetric=null;
+ redrawMonitoring();monitorTooltip();
+}
+for(const def of monitorDefinitions){
+ const canvas=$(def.id);
+ const hoverAt=e=>{
+  if(!monitoringPoints.length)return;
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const progress=Math.max(0,Math.min(1,(x-MONITOR_PLOT.left)/Math.max(1,rect.width-MONITOR_PLOT.left-MONITOR_PLOT.right)));
+  const index=Math.round(progress*(monitoringPoints.length-1));
+  setMonitorHover(index,def.kind);
+ };
+ canvas.addEventListener('pointermove',hoverAt);
+ canvas.addEventListener('pointerdown',hoverAt);
+ canvas.addEventListener('pointerleave',clearMonitorHover);
+ canvas.addEventListener('blur',clearMonitorHover);
+ canvas.addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','Home','End','Escape'].includes(e.key))return;
+  e.preventDefault();
+  if(e.key==='Escape'){clearMonitorHover();return}
+  if(!monitoringPoints.length)return;
+  const index=e.key==='Home'?0:e.key==='End'?monitoringPoints.length-1:
+    Math.max(0,Math.min(monitoringPoints.length-1,(monitorHoverIndex??0)+(e.key==='ArrowLeft'?-1:1)));
+  setMonitorHover(index,def.kind);
+ });
+}
+async function loadMonitoring(){
+ if(monitoringBusy)return;
+ monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
+ try{
+  const d=await api('monitor-history&window='+encodeURIComponent(monitoringWindow));
+  if(!Array.isArray(d.points)||d.points.length>450)throw Error('Ungültige Monitoring-Antwort');
+  monitoringPoints=d.points;
+  monitorHoverIndex=null;monitorHoverMetric=null;
+  const latest=d.latest;
+  const fresh=latest && Number.isInteger(latest.ts) && Date.now()/1000-latest.ts<180;
+  txt('monitorCpu',fresh && Number.isFinite(latest.cpu_pct)?latest.cpu_pct.toLocaleString('de-DE',{maximumFractionDigits:1})+' %':'–');
+  txt('monitorRam',fresh && Number.isFinite(latest.ram_bytes)?(latest.ram_bytes/1073741824).toLocaleString('de-DE',{maximumFractionDigits:2})+' GiB':'–');
+  txt('monitorPlayers',fresh && Number.isFinite(latest.players)?String(latest.players):'–');
+  txt('monitorTime',latest?new Date(latest.ts*1000).toLocaleTimeString('de-DE'):'–');
+  txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+' Messungen · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
+  updateMonitorSummaries();
+  redrawMonitoring();monitorTooltip();
+ }catch(e){monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
+ finally{monitoringBusy=false}
+}
+$('monitorReload').addEventListener('click',loadMonitoring);
+$('monitorWindow').addEventListener('change',e=>{monitoringWindow=e.target.value;loadMonitoring()});
+window.addEventListener('resize',()=>{if(!$('monitor').hidden){redrawMonitoring();monitorTooltip()}});
+setInterval(()=>{if(!$('app').hidden&&!$('monitor').hidden)loadMonitoring()},60000);
+
 async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs()}async function action(name){
  if(busy)return;
  const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
@@ -223,7 +426,7 @@ $('panelStartUpdate').addEventListener('click',async()=>{
 });
 $('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
 $('panelCheckReleases').addEventListener('click',loadPanelRelease);
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
 async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}

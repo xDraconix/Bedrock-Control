@@ -32,6 +32,7 @@ jobs:
           from pathlib import Path
           files = [
               Path("system/usr-local-sbin/bedrock-console-manager"),
+              Path("system/usr-local-sbin/bedrock-monitor-manager"),
               Path("system/usr-local-bin/bedrock-panel-apply-release"),
               Path("system/usr-local-bin/bedrock-panel-system-plan"),
               Path("system/usr-local-bin/bedrock-panel-verify-release"),
@@ -44,14 +45,16 @@ jobs:
           PY
       - name: Test player roster and console command validation
         run: python3 tests/test_player_manager.py
+      - name: Test historical monitoring storage and CPU deltas
+        run: sudo python3 tests/test_monitoring.py
+      - name: Test interactive monitoring charts and null-safe summaries
+        run: node tests/test_monitoring_ui.cjs
       - name: Test player UI toggle behavior
         run: node tests/test_player_ui.cjs
       - name: Test read-only Bedrock world seed parser
         run: python3 tests/test_world_seed.py
       - name: Test component update allowlist
         run: python3 tests/test_system_update_plan.py
-      - name: Test secure bridge and future monitor activation
-        run: python3 tests/test_monitor_bridge.py
       - name: Test atomic root component replacement
         run: sudo python3 tests/test_system_component_install.py
       - name: Test rollback after interrupted component update
@@ -65,5 +68,5 @@ jobs:
       - name: Build and validate unsigned installer ZIP
         run: |
           bash release-tools/build-release.sh
-          unzip -tq dist/Bedrock-Control-PRO-v2.7.2-Release.zip
-          unzip -p dist/Bedrock-Control-PRO-v2.7.2-Release.zip bedrock-control-pro-2.7.2-installer/VERSION | grep -qx 2.7.2
+          unzip -tq dist/Bedrock-Control-PRO-v2.8.0-Release.zip
+          unzip -p dist/Bedrock-Control-PRO-v2.8.0-Release.zip bedrock-control-pro-2.8.0-installer/VERSION | grep -qx 2.8.0

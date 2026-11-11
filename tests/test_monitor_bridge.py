@@ -64,8 +64,20 @@ with tempfile.TemporaryDirectory() as tmp:
  else:raise AssertionError('Unknown root helper allowed')
  suspicious.unlink()
 
-bridge_files=set((BASE/'system/usr-local-sbin').glob('bedrock-monitor-manager'))
-assert not bridge_files, 'v2.7.2 must not ship monitoring code or units'
-assert not (BASE/'system/systemd/bedrock-monitor.service').exists()
-assert not (BASE/'system/systemd/bedrock-monitor.timer').exists()
+version = (BASE/'VERSION').read_text().strip()
+monitor_files = [
+    BASE/'system/usr-local-sbin/bedrock-monitor-manager',
+    BASE/'system/systemd/bedrock-monitor.service',
+    BASE/'system/systemd/bedrock-monitor.timer',
+]
+if version == '2.7.2':
+    assert not any(p.exists() for p in monitor_files), (
+        'v2.7.2 must not ship monitoring components'
+    )
+elif version == '2.8.0':
+    assert all(p.is_file() and not p.is_symlink() for p in monitor_files), (
+        'v2.8.0 must ship all three monitoring components'
+    )
+else:
+    raise AssertionError('Unexpected version: ' + version)
 print('OK: compatible v2.7.2 bridge without monitoring; complete signed v2.8.0 timer activation and rollback')

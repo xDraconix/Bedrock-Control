@@ -246,3 +246,29 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
  outline:3px solid #e1f6aa;
  outline-offset:3px;
 }
+
+/* v2.8.0 – monitoring history */
+.monitor-header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.monitor-header h2{margin:0 0 8px}
+.monitor-header .actions{align-items:center;flex-wrap:wrap}
+.monitor-header select{min-height:38px}
+.monitor-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:22px 0}
+.monitor-stat{border:1px solid rgba(142,181,151,.2);background:rgba(9,22,16,.35);border-radius:12px;padding:17px 18px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.monitor-stat>span{font-size:11px;letter-spacing:.09em;color:#a6c1af;font-weight:750}
+.monitor-stat strong{font-size:clamp(21px,2vw,30px);line-height:1.2;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:#f4fff6}
+.monitor-stat small{color:#9cb3a3;line-height:1.45}
+.monitor-charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:14px}
+.monitor-chart-panel{background:rgba(7,18,13,.3);border:1px solid rgba(133,176,140,.2);border-radius:12px;padding:17px;min-width:0}
+.monitor-chart-panel h3{margin:0 0 12px;font-size:15px}
+.monitor-chart-panel canvas{display:block;width:100%;height:220px}
+@media(max-width:1050px){.monitor-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:710px){.monitor-stat-grid,.monitor-charts{grid-template-columns:1fr}}
+
+/* v2.8.0 – synchronized cursor and per-period statistics */
+.monitor-unit{font-size:12px;font-weight:500;color:#9fb7a7}
+.monitor-stat-summary{font-size:12px;color:#a9cfb8;line-height:1.65;margin:-3px 0 12px;min-height:20px;font-variant-numeric:tabular-nums}
+.monitor-chart-wrap{position:relative;min-width:0}
+.monitor-chart-wrap canvas{cursor:crosshair;touch-action:pan-y}
+.monitor-chart-wrap canvas:focus-visible{outline:2px solid #9ce7ac;outline-offset:3px;border-radius:4px}
+.monitor-tooltip{position:absolute;top:12px;z-index:2;pointer-events:none;min-width:190px;max-width:calc(100% - 16px);padding:9px 12px;border-radius:8px;border:1px solid #527d65;background:#10261b;color:#e6ffed;box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.monitor-tooltip[hidden]{display:none}
