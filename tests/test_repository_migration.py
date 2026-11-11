@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline regression tests for repository rename compatibility."""
 import importlib.util
+from importlib.machinery import SourceFileLoader
 import io
 import json
 import pathlib
@@ -9,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 SOURCE=pathlib.Path(__file__).resolve().parents[1]/'system/usr-local-sbin/bedrock-panel-self-update-worker'
-spec=importlib.util.spec_from_file_location('panel_updater_migration', SOURCE)
+spec=importlib.util.spec_from_loader('panel_updater_migration', SourceFileLoader('panel_updater_migration',str(SOURCE)))
 worker=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
