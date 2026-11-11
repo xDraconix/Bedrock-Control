@@ -43,6 +43,8 @@ jobs:
               compile(path.read_bytes(), str(path), "exec")
               print("OK:", path)
           PY
+      - name: Test repository migration release lookup
+        run: python3 tests/test_repository_migration.py
       - name: Test player roster and console command validation
         run: python3 tests/test_player_manager.py
       - name: Test historical monitoring storage and CPU deltas
@@ -68,5 +70,6 @@ jobs:
       - name: Build and validate unsigned installer ZIP
         run: |
           bash release-tools/build-release.sh
-          unzip -tq dist/Bedrock-Control-PRO-v2.8.0-Release.zip
-          unzip -p dist/Bedrock-Control-PRO-v2.8.0-Release.zip bedrock-control-pro-2.8.0-installer/VERSION | grep -qx 2.8.0
+          VERSION=$(cat VERSION)
+          unzip -tq "dist/Bedrock-Control-PRO-v${VERSION}-Release.zip"
+          unzip -p "dist/Bedrock-Control-PRO-v${VERSION}-Release.zip" "bedrock-control-pro-${VERSION}-installer/VERSION" | grep -qx "$VERSION"
