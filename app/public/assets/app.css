@@ -272,3 +272,215 @@ pre{background:#101a14;border:1px solid #415742;border-radius:4px;color:#c6e5b3}
 .monitor-chart-wrap canvas:focus-visible{outline:2px solid #9ce7ac;outline-offset:3px;border-radius:4px}
 .monitor-tooltip{position:absolute;top:12px;z-index:2;pointer-events:none;min-width:190px;max-width:calc(100% - 16px);padding:9px 12px;border-radius:8px;border:1px solid #527d65;background:#10261b;color:#e6ffed;box-shadow:0 8px 28px rgba(0,0,0,.4);font-size:12px;line-height:1.6;font-variant-numeric:tabular-nums}
 .monitor-tooltip[hidden]{display:none}
+
+/* DracoRock Control 3.0 – visual system, additive; existing functional selectors remain intact. */
+:root{
+ --dr-bg:#0b141c;--dr-surface:#16232b;--dr-surface-raised:#1d2c34;
+ --dr-line:#30454c;--dr-text:#eaf4f1;--dr-muted:#a7bcc0;
+ --dr-accent:#75e6bd;--dr-highlight:#afd8ff;
+ font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--dr-bg);color:var(--dr-text);
+}
+body{
+ background:
+ radial-gradient(ellipse 65% 45% at 95% 3%,rgba(40,111,116,.18),transparent 75%),
+ radial-gradient(ellipse 50% 40% at 10% 95%,rgba(45,114,84,.12),transparent 75%),
+ var(--dr-bg);
+}
+aside{
+ width:262px;background:linear-gradient(180deg,#12252c 0%,#101c25 66%,#0c171f 100%);
+ border-right:1px solid #2a454a;padding:28px 17px;
+}
+.brand{border-bottom:1px solid #315059;padding:0 5px 26px;margin-bottom:20px;gap:12px}
+.brand-mark{display:block;width:52px;height:52px;object-fit:contain;flex:none;filter:drop-shadow(0 5px 12px rgba(35,214,160,.17))}
+.brand-mark-login{width:82px;height:82px}
+.brand b{font-size:14px;letter-spacing:1.45px;color:#effaf7;font-weight:800}
+.brand small{font-size:11px;color:var(--dr-accent);letter-spacing:2px}
+.brand-version{opacity:.65;letter-spacing:.6px}
+nav{gap:5px}
+nav a{border-radius:9px;border:1px solid transparent;border-left:3px solid transparent;padding:12px 13px;color:#a9c1c5;transition:background .15s,color .15s,border-color .15s}
+nav a:hover,nav a.selected{background:#204039;border-color:#335a54;border-left-color:#79ecc2;color:#edfff9}
+main{background:linear-gradient(120deg,rgba(82,205,166,.025),transparent 42%);padding-top:36px}
+header{padding-bottom:21px;border-bottom:1px solid #30434b;margin-bottom:28px}
+header h1{color:#f5fffc;font-size:clamp(24px,2.2vw,32px);letter-spacing:-.65px}
+.eyebrow{display:flex;align-items:center;gap:9px;font-size:10px;color:#96c9bb;letter-spacing:1.7px}
+.eyebrow-accent{width:7px;height:7px;border-radius:50%;background:#77eac1;box-shadow:0 0 11px #77eac199;flex:none}
+.card{background:linear-gradient(180deg,#1a2b32,#16242b);border:1px solid #355058;border-radius:13px;box-shadow:0 11px 26px rgba(0,0,0,.18);padding:23px}
+.metric{border-top:2px solid #50bfa5;min-height:148px}
+.metric strong{color:#f0fff9;font-weight:780;letter-spacing:-.35px}
+h2{color:#effaf7;font-weight:750}
+h3{color:#d5f5e8}
+.muted{color:#adc3c4}
+.label{color:#9fcbc0}
+button{border-radius:8px;box-shadow:none;transition:background .15s,transform .15s,filter .15s}
+button:active:not(:disabled){transform:translateY(1px)}
+.primary{background:#71ddb6;color:#08221c}
+.primary:hover{background:#8ef0cb}
+.positive{background:#285a4c;color:#ceffee}
+.secondary,.ghost{background:#2b4249;color:#e2f5f1}
+.danger{background:#603239;color:#ffdbd9}
+button:focus-visible,nav a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #9ff6d4;outline-offset:2px}
+input,select{background:#101e27;color:#e9f7f2;border:1px solid #466168;border-radius:8px}
+pre{background:#101d26;color:#c3f0df;border:1px solid #35535b;border-radius:9px}
+.pill{border:1px solid #4a6770;border-radius:999px;background:#243a42;color:#d5eeeb}
+.pill.online{background:#214b3b;color:#a9ffe0;border-color:#4c947c}
+.pill.starting{background:#554724;color:#ffe4a1;border-color:#9d7b3d}
+.pill.offline,.pill.failed{background:#4c292e;color:#ffceca;border-color:#92565e}
+.notice{background:#1b483e;border-color:#3c8976;border-radius:9px;color:#d3fff0}
+.login{background:
+ radial-gradient(circle at 50% 18%,rgba(74,175,148,.17),transparent 35%),
+ linear-gradient(140deg,#0a141c,#122831 65%,#0b171e)}
+.loginbox{width:min(430px,calc(100vw - 28px));background:linear-gradient(170deg,#1b3038,#101e27);border:1px solid #3c5b60;border-radius:19px;padding:clamp(24px,5vw,42px);box-shadow:0 28px 90px #0008;gap:15px}
+.login-emblem{width:90px;height:90px;display:grid;place-items:center;margin:0 auto 5px}
+.login-kicker{text-align:center;color:#8ac9b7;font-size:10px;letter-spacing:2px;font-weight:700}
+.loginbox h1{text-align:center;font-size:clamp(22px,5vw,27px);letter-spacing:.25px}
+.loginbox h1 span{color:#8df0c9}
+.loginbox p{text-align:center;color:#b2c9c9;margin:0 0 12px}
+.loginbox label{color:#d0e9e5}
+.loginbox input{min-height:44px}
+.loginbox button{min-height:44px}
+.asidefoot{border-top:1px solid #2a454a;padding-top:16px;color:#94adae}
+footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
+@media(max-width:700px){
+ aside{width:auto;padding:12px 15px;border-right:0;border-bottom:1px solid #2e4b51}
+ .brand{padding:0 0 11px;margin-bottom:8px}
+ .brand-mark{height:43px;width:43px}
+ nav{gap:6px;padding-bottom:5px}
+ nav a{padding:9px 10px;flex:none}
+ main{padding:22px 15px}
+ header{gap:12px;padding-bottom:16px}
+ .headright{width:100%;flex-wrap:wrap}
+ .cards{gap:11px}
+ .card{padding:17px}
+ .metric{min-height:132px}
+}
+@media(max-width:430px){.cards{grid-template-columns:1fr}.loginbox{padding:25px}}
+@media(prefers-reduced-motion:reduce){button,nav a{transition:none}button:active:not(:disabled){transform:none}}
+
+/* DracoRock v3.0 – quiet steel-blue surfaces; green is semantic, not decorative.
+   Intentional late overrides for selectors inherited from the pre-v3 green theme. */
+:root{
+ --dr-line:#355866;
+ --dr-frame:#426674;
+ --dr-inset:#12232e;
+ --dr-cyan:#78bed6;
+}
+.card,.tab .card{
+ border:1px solid var(--dr-frame);
+ background:linear-gradient(180deg,#1b2d36,#16252e);
+ box-shadow:0 10px 24px rgba(0,0,0,.16);
+}
+.metric{border-top:2px solid #4c8396}
+.metric .label,.server-info-label,.system-metric-label{color:#a5c7d3}
+.server-info-item,.system-metric{
+ background:linear-gradient(120deg,#12232d,#152831);
+ border:1px solid #355866;
+ border-left:3px solid #4c8295;
+ border-radius:7px;
+}
+.server-info-value,.system-metric-value{color:#f0f8fb}
+.system-metric-detail{color:#aec4cf}
+.tab .card>h2,.tab .card>h3{color:#edf6fb}
+.tab .card>h3{border-left-color:#609eb1}
+.tab .card>p.muted,.tab .card>.muted{color:#b0c5cf}
+.tab .card .addon-row,
+.tab .card .backuplist>div:not(.player-entry){
+ background:linear-gradient(110deg,#132631,#192f3a);
+ border:1px solid #355866;
+ border-left:3px solid #4c8295;
+}
+.tab .card .addon-row:hover,
+.tab .card .backuplist>div:not(.player-entry):hover{
+ border-color:#6496a7;
+}
+.tab .card .addon-row b,
+.tab .card .addon-row strong,
+.tab .card .backuplist>div:not(.player-entry)>span:first-child{color:#eef7fc}
+.tab .card .addon-row .muted{color:#a9c2ce}
+.tab .card label:not(.property-field label){color:#d0e3ea}
+.monitor-stat,.monitor-chart-panel{
+ background:linear-gradient(140deg,#142832,#172b35);
+ border:1px solid #355866;
+}
+.monitor-stat>span,.monitor-stat small,.monitor-unit{color:#a9c9d3}
+.monitor-stat strong{color:#eaf8ff}
+.monitor-stat-summary{color:#a9cad7}
+.monitor-tooltip{
+ border-color:#528092;background:#122c39;color:#eaf9ff;
+}
+.monitor-chart-wrap canvas:focus-visible{outline-color:#9bd8ec}
+#players .player-allowlist-state{background:#162e37;border-color:#426876}
+#players .player-action:focus-visible,.tab .card button:focus-visible,
+.tab .card input:focus-visible,.tab .card select:focus-visible{
+ outline-color:#a0d8eb;
+}
+/* Semantic green is retained for online, enabled, success and positive actions. */
+.server-state.online,.pill.online,#players .player-badge-online,
+#players .player-allowlist-enabled{border-color:#4c947c}
+
+/* DracoRock v3.0 – remaining legacy green containers (screens: updates, players, settings).
+   Keep meaningful success/online/allow/OP badge colors, never green full-width cards. */
+.property-field{
+ background:linear-gradient(150deg,#172b35,#192d36);
+ border:1px solid #3c5b69;
+ border-radius:9px;
+}
+.property-field input,.property-field select{
+ background:#10232e;
+ border:1px solid #4a6a78;
+ color:#eaf7fc;
+}
+.property-field input:focus,.property-field select:focus{outline-color:#93d1e6}
+.panel-security-item{
+ background:#122530;
+ border:1px solid #3b6070;
+ border-radius:8px;
+ color:#e4f2f8;
+}
+.panel-security-item>span{color:#a7c7d5}
+.panel-security-item>strong{color:#eef8fd}
+.panel-release-markdown{
+ background:#0e222b;
+ border:1px solid #3b6070;
+ border-radius:9px;
+ color:#d5e7ee;
+}
+.panel-release-markdown h3,.panel-release-markdown strong{color:#f0f8fc}
+.panel-release-markdown h4{color:#b0d8e9}
+.panel-release-markdown code{background:#203a48;color:#c0e9f9;border-radius:4px}
+.panel-release-markdown a{color:#92d5ef}
+#players .player-entry{
+ background:linear-gradient(110deg,#142934,#19303b);
+ border:1px solid #416574;
+ box-shadow:inset 3px 0 0 #54889a,0 3px 10px rgba(0,0,0,.12);
+}
+#players .player-entry:hover{border-color:#6097a8}
+#players .player-entry-online{
+ background:linear-gradient(110deg,#172f3a,#1c3640);
+ border-color:#47778a;
+ box-shadow:inset 3px 0 0 #6dd9b4,0 3px 12px rgba(0,0,0,.12);
+}
+#players .card>h2,#players .card>h3{color:#eef8fc}
+#players .card>h3{border-left-color:#71acc2}
+#players .card>p.muted,#players #playersWarning{color:#b1cbd5}
+#players .player-name{color:#f3faff}
+#players .player-allowlist-state{
+ background:#162e39;
+ border:1px solid #477180;
+ color:#d1e9f3;
+}
+#players .player-allowlist-enabled{
+ background:#1c373b;
+ border-color:#4a8779;
+ color:#b9f7dc;
+}
+#players .player-allowlist-disabled{
+ background:#23313a;
+ border-color:#927c54;
+ color:#f4d49a;
+}
+/* Preserve action meaning; green/amber/red belong to badges, buttons and states. */
+#players .player-action:focus-visible,
+#players .player-action[aria-pressed="true"]:focus-visible{outline-color:#a0d8eb}
+#players .player-action[aria-pressed="true"]{
+ box-shadow:0 0 0 1px rgba(120,192,218,.3),inset 0 0 0 1px rgba(255,255,255,.07);
+}
