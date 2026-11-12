@@ -41,7 +41,7 @@ class DracoRockBrandingTests(unittest.TestCase):
         self.assertNotIn('xlink:href=',logo)
         self.assertNotIn('<image ',logo.lower())
         self.assertIn('src="assets/dracorock-mark.svg"',self.page)
-        self.assertIn('class="brand-mark-login"',self.page)
+        self.assertIn('class="brand-mark brand-mark-login"',self.page)
         self.assertIn('alt="DracoRock Control Logo"',self.page)
 
     def test_repository_links(self):
