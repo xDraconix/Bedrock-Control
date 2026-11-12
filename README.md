@@ -4,9 +4,13 @@ DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debia
 
 ## Version
 
-**2.8.0 – Entwicklungsstand: Live-Monitoring mit historischen Metriken.** Ausschließlich im separaten Testbranch; v2.7.1 bleibt die stabile Produktivversion.
+**v2.9.0 Stable** ist die veröffentlichte Version von DracoRock Control. **v3.0.0** ist der nächste, noch unveröffentlichte Design-Entwicklungsstand.
 
-Neu: Online-Spielernamen über die Bedrock-Konsole automatisch anzeigen; Allowlist und Operatorrechte über Häkchen-Schalter ändern; XUID-basierter Operatorstatus, soweit eindeutig zuordenbar. Verbesserte visuelle Hierarchie auf den Verwaltungsseiten. Eine gesonderte Bedrock-Blockliste gibt es nicht. Details: [v2.7.0 Release Notes](docs/releases/v2.7.0.md) und [Entwicklungsdokumentation](docs/development/player-management-v2.7.0.md).
+### DracoRock Control 3.0 – Designvorschau (in Entwicklung)
+
+Ein eigenständiges SVG-Logo, ein überarbeitetes dunkles Dashboard, ein klareres Login und verbesserte mobile Darstellung. Alle Verwaltungsfunktionen, API-Endpunkte, Datenbanken, Systemdienste und signierten Updateformate bleiben erhalten.
+
+Der V3-Code wird **nicht auf dem Produktionsserver** installiert, bevor der Testcontainer ein signiertes Upgrade erfolgreich bestanden hat. Details: [v3.0.0 Entwicklungsnotizen](docs/releases/v3.0.0.md).
 
 ## Neu in der Entwicklung: Monitoring 2.8.0
 
