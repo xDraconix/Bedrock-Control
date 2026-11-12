@@ -416,3 +416,71 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 /* Semantic green is retained for online, enabled, success and positive actions. */
 .server-state.online,.pill.online,#players .player-badge-online,
 #players .player-allowlist-enabled{border-color:#4c947c}
+
+/* DracoRock v3.0 – remaining legacy green containers (screens: updates, players, settings).
+   Keep meaningful success/online/allow/OP badge colors, never green full-width cards. */
+.property-field{
+ background:linear-gradient(150deg,#172b35,#192d36);
+ border:1px solid #3c5b69;
+ border-radius:9px;
+}
+.property-field input,.property-field select{
+ background:#10232e;
+ border:1px solid #4a6a78;
+ color:#eaf7fc;
+}
+.property-field input:focus,.property-field select:focus{outline-color:#93d1e6}
+.panel-security-item{
+ background:#122530;
+ border:1px solid #3b6070;
+ border-radius:8px;
+ color:#e4f2f8;
+}
+.panel-security-item>span{color:#a7c7d5}
+.panel-security-item>strong{color:#eef8fd}
+.panel-release-markdown{
+ background:#0e222b;
+ border:1px solid #3b6070;
+ border-radius:9px;
+ color:#d5e7ee;
+}
+.panel-release-markdown h3,.panel-release-markdown strong{color:#f0f8fc}
+.panel-release-markdown h4{color:#b0d8e9}
+.panel-release-markdown code{background:#203a48;color:#c0e9f9;border-radius:4px}
+.panel-release-markdown a{color:#92d5ef}
+#players .player-entry{
+ background:linear-gradient(110deg,#142934,#19303b);
+ border:1px solid #416574;
+ box-shadow:inset 3px 0 0 #54889a,0 3px 10px rgba(0,0,0,.12);
+}
+#players .player-entry:hover{border-color:#6097a8}
+#players .player-entry-online{
+ background:linear-gradient(110deg,#172f3a,#1c3640);
+ border-color:#47778a;
+ box-shadow:inset 3px 0 0 #6dd9b4,0 3px 12px rgba(0,0,0,.12);
+}
+#players .card>h2,#players .card>h3{color:#eef8fc}
+#players .card>h3{border-left-color:#71acc2}
+#players .card>p.muted,#players #playersWarning{color:#b1cbd5}
+#players .player-name{color:#f3faff}
+#players .player-allowlist-state{
+ background:#162e39;
+ border:1px solid #477180;
+ color:#d1e9f3;
+}
+#players .player-allowlist-enabled{
+ background:#1c373b;
+ border-color:#4a8779;
+ color:#b9f7dc;
+}
+#players .player-allowlist-disabled{
+ background:#23313a;
+ border-color:#927c54;
+ color:#f4d49a;
+}
+/* Preserve action meaning; green/amber/red belong to badges, buttons and states. */
+#players .player-action:focus-visible,
+#players .player-action[aria-pressed="true"]:focus-visible{outline-color:#a0d8eb}
+#players .player-action[aria-pressed="true"]{
+ box-shadow:0 0 0 1px rgba(120,192,218,.3),inset 0 0 0 1px rgba(255,255,255,.07);
+}
