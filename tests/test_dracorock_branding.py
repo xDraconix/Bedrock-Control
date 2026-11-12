@@ -22,7 +22,7 @@ class DracoRockBrandingTests(unittest.TestCase):
         self.assertEqual((ROOT/'VERSION').read_text().strip(),'3.0.0')
         for marker in ('<title>DracoRock Control</title>',
                        'DRACOROCK <span>CONTROL</span>',
-                       '<b>DRACOROCK</b><small>CONTROL</small>',
+                       '<b>DRACOROCK</b><small>CONTROL <span class="brand-version">/ 3.0</span></small>',
                        'DracoRock Control aktualisieren',
                        'DRACOROCK CONTROL v3.0.0'):
             self.assertIn(marker,self.page)
