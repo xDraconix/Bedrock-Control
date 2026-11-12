@@ -355,3 +355,64 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 }
 @media(max-width:430px){.cards{grid-template-columns:1fr}.loginbox{padding:25px}}
 @media(prefers-reduced-motion:reduce){button,nav a{transition:none}button:active:not(:disabled){transform:none}}
+
+/* DracoRock v3.0 – quiet steel-blue surfaces; green is semantic, not decorative.
+   Intentional late overrides for selectors inherited from the pre-v3 green theme. */
+:root{
+ --dr-line:#355866;
+ --dr-frame:#426674;
+ --dr-inset:#12232e;
+ --dr-cyan:#78bed6;
+}
+.card,.tab .card{
+ border:1px solid var(--dr-frame);
+ background:linear-gradient(180deg,#1b2d36,#16252e);
+ box-shadow:0 10px 24px rgba(0,0,0,.16);
+}
+.metric{border-top:2px solid #4c8396}
+.metric .label,.server-info-label,.system-metric-label{color:#a5c7d3}
+.server-info-item,.system-metric{
+ background:linear-gradient(120deg,#12232d,#152831);
+ border:1px solid #355866;
+ border-left:3px solid #4c8295;
+ border-radius:7px;
+}
+.server-info-value,.system-metric-value{color:#f0f8fb}
+.system-metric-detail{color:#aec4cf}
+.tab .card>h2,.tab .card>h3{color:#edf6fb}
+.tab .card>h3{border-left-color:#609eb1}
+.tab .card>p.muted,.tab .card>.muted{color:#b0c5cf}
+.tab .card .addon-row,
+.tab .card .backuplist>div:not(.player-entry){
+ background:linear-gradient(110deg,#132631,#192f3a);
+ border:1px solid #355866;
+ border-left:3px solid #4c8295;
+}
+.tab .card .addon-row:hover,
+.tab .card .backuplist>div:not(.player-entry):hover{
+ border-color:#6496a7;
+}
+.tab .card .addon-row b,
+.tab .card .addon-row strong,
+.tab .card .backuplist>div:not(.player-entry)>span:first-child{color:#eef7fc}
+.tab .card .addon-row .muted{color:#a9c2ce}
+.tab .card label:not(.property-field label){color:#d0e3ea}
+.monitor-stat,.monitor-chart-panel{
+ background:linear-gradient(140deg,#142832,#172b35);
+ border:1px solid #355866;
+}
+.monitor-stat>span,.monitor-stat small,.monitor-unit{color:#a9c9d3}
+.monitor-stat strong{color:#eaf8ff}
+.monitor-stat-summary{color:#a9cad7}
+.monitor-tooltip{
+ border-color:#528092;background:#122c39;color:#eaf9ff;
+}
+.monitor-chart-wrap canvas:focus-visible{outline-color:#9bd8ec}
+#players .player-allowlist-state{background:#162e37;border-color:#426876}
+#players .player-action:focus-visible,.tab .card button:focus-visible,
+.tab .card input:focus-visible,.tab .card select:focus-visible{
+ outline-color:#a0d8eb;
+}
+/* Semantic green is retained for online, enabled, success and positive actions. */
+.server-state.online,.pill.online,#players .player-badge-online,
+#players .player-allowlist-enabled{border-color:#4c947c}
