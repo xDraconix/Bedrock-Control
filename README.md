@@ -1,6 +1,6 @@
-# Bedrock Control PRO
+# DracoRock Control
 
-Bedrock Control PRO verwaltet einen **Minecraft Bedrock Dedicated Server auf Debian 13** über ein lokales Webpanel. Minecraft kann auf einem frischen Debian-System direkt über das Panel installiert werden.
+DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debian 13** über ein lokales Webpanel. Minecraft kann auf einem frischen Debian-System direkt über das Panel installiert werden.
 
 ## Version
 
@@ -58,8 +58,8 @@ Im **Welten-Manager** werden der signierte 64-Bit-Weltseed aus Bedrocks `level.d
 
 ```bash
 apt update && apt install -y git ca-certificates
-git clone https://github.com/xDraconix/Bedrock-Control.git
-cd Bedrock-Control
+git clone https://github.com/xDraconix/DracoRock-Control.git
+cd DracoRock-Control
 bash install.sh
 ```
 
@@ -81,7 +81,7 @@ Existiert ein abweichender Schlüssel, wird die Installation verweigert, statt i
 
 Die Einstellung für den Updatekanal wird unter `/etc/bedrock-control-pro/update-channel` (Werte `stable` oder `test`) außerhalb der Webdateien gespeichert. Der Browser übergibt dem Root-Updater keine beliebigen Shellbefehle, Dateipfade oder Download-URLs.
 
-GitHub-Releases: https://github.com/xDraconix/Bedrock-Control/releases
+GitHub-Releases: https://github.com/xDraconix/DracoRock-Control/releases
 
 ## Ein-Befehl-Release auf dem vertrauenswürdigen Rechner
 
@@ -131,4 +131,4 @@ Genau drei Dateien als GitHub-Release-Assets veröffentlichen: ZIP, `.manifest`,
 - [Release Notes v2.5.5](docs/releases/v2.5.5.md)
 - [System-Update-Design und Tests](docs/development/system-updater-v2.6.0.md)
 - [Entwicklungsnotizen zum Update-Manager](docs/development/panel-updater-v2.5.0.md)
-- Quellcode: https://github.com/xDraconix/Bedrock-Control
+- Quellcode: https://github.com/xDraconix/DracoRock-Control
