@@ -395,7 +395,7 @@ async function loadPanelRelease(){
    ? (d.installation_enabled?'Signiertes neues Panel-Release ist verfügbar. Update per Klick möglich.':'Neue Version verfügbar, aber Signaturdateien oder vertrauenswürdiger Schlüssel fehlen.')
    : 'Keine neuere Panel-Version im ausgewählten Kanal verfügbar.');
   const a=$('panelReleaseLink');
-  if(/^https:\/\/github\.com\/xDraconix\/Bedrock-Control\/releases\/tag\/v\d+\.\d+\.\d+$/.test(d.release_url||'')){
+  if(/^https:\/\/github\.com\/xDraconix\/DracoRock-Control\/releases\/tag\/v\d+\.\d+\.\d+$/.test(d.release_url||'')){
    a.href=d.release_url;a.hidden=false;
   }
  }catch(e){$('panelStartUpdate').disabled=true;txt('panelUpdateState','Versionsprüfung fehlgeschlagen: '+e.message);renderReleaseMarkdown('–');txt('panelSignatureState','Signaturstatus nicht verfügbar.');txt('panelReleaseSignatureState','Nicht ermittelt');txt('panelAutoInstallState','Prüfe Verfügbarkeit …')}
