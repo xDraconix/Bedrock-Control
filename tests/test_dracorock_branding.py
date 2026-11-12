@@ -51,7 +51,23 @@ class DracoRockBrandingTests(unittest.TestCase):
         self.assertIn('border-left:3px solid #4c8295', css)
         self.assertIn('.monitor-stat,.monitor-chart-panel{', css)
         self.assertIn('.server-state.online,.pill.online', css)
-        self.assertIn('assets/app.css?v=3.0.0-petrol2', self.page)
+        self.assertIn('assets/app.css?v=3.0.0-petrol3', self.page)
+
+    def test_legacy_green_containers_replaced(self):
+        css=(ROOT/'app/public/assets/app.css').read_text()
+        for selector in ('.property-field{',
+                         '.property-field input,.property-field select{',
+                         '.panel-security-item{',
+                         '.panel-release-markdown{',
+                         '#players .player-entry{',
+                         '#players .player-entry-online{',
+                         '#players .player-allowlist-state{'):
+            self.assertIn(selector, css)
+        self.assertIn('background:#122530', css)
+        self.assertIn('background:#0e222b', css)
+        self.assertIn('background:linear-gradient(110deg,#142934,#19303b)', css)
+        self.assertIn('background:linear-gradient(150deg,#172b35,#192d36)', css)
+        self.assertIn('assets/app.css?v=3.0.0-petrol3', self.page)
 
     def test_repository_links(self):
         self.assertIn('xDraconix/DracoRock-Control',self.readme)
