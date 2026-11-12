@@ -222,17 +222,31 @@ if($api!==null) {
   $channelFile='/etc/bedrock-control-pro/update-channel';
   $channel=is_readable($channelFile)?trim((string)file_get_contents($channelFile)):'stable';
   if(!in_array($channel,['stable','test'],true))respond(['error'=>'Ungültige lokale Updatekanal-Konfiguration'],503);
-  $url=$channel==='test'
-   ?'https://api.github.com/repos/xDraconix/Bedrock-Control/releases?per_page=30'
-   :'https://api.github.com/repos/xDraconix/Bedrock-Control/releases/latest';
-  $r=run(['/usr/bin/curl','--fail','--silent','--show-error','--proto','=https',
-    '--max-redirs','0','--connect-timeout','4','--max-time','10','--max-filesize','262144',
-    '--header','Accept: application/vnd.github+json',
-    '--header','X-GitHub-Api-Version: 2022-11-28',
-    '--user-agent','Bedrock-Control-PRO/2.5.0-beta6', $url]);
-  if($r['code']!==0)respond(['error'=>'GitHub Release-API ist momentan nicht erreichbar.'],502);
-  if(strlen($r['out'])>262144)respond(['error'=>'GitHub-Antwort zu groß'],502);
-  $json=json_decode($r['out'],true);
+  // Prefer the new repository once it exists; fall back only on HTTP 404.
+  // API redirects are rejected to prevent unapproved repository substitution.
+  $repositories=['xDraconix/DracoRock-Control','xDraconix/Bedrock-Control'];
+  $sourceRepo=null;$json=null;
+  foreach($repositories as $repo){
+   $url='https://api.github.com/repos/'.$repo.'/releases'.($channel==='test'?'?per_page=30':'/latest');
+   $r=run(['/usr/bin/curl','--silent','--show-error','--proto','=https',
+     '--max-redirs','0','--connect-timeout','4','--max-time','10','--max-filesize','262144',
+     '--write-out',"\\n%{http_code}",
+     '--header','Accept: application/vnd.github+json',
+     '--header','X-GitHub-Api-Version: 2022-11-28',
+     '--user-agent','DracoRock-Control/2.8.1', $url]);
+   if($r['code']!==0)respond(['error'=>'GitHub Release-API ist momentan nicht erreichbar.'],502);
+   $split=strrpos($r['out'],"\n");
+   if($split===false)respond(['error'=>'Ungültiger GitHub-HTTP-Status.'],502);
+   $status=substr($r['out'],$split+1);
+   if($status==='404' && $repo===$repositories[0])continue;
+   if($status!=='200')respond(['error'=>'GitHub Release-API meldet HTTP '.$status],502);
+   $body=substr($r['out'],0,$split);
+   if(strlen($body)>262144)respond(['error'=>'GitHub-Antwort zu groß'],502);
+   $json=json_decode($body,true);
+   $sourceRepo=$repo;
+   break;
+  }
+  if($sourceRepo===null)respond(['error'=>'Keine vertrauenswürdige GitHub-Release-Quelle gefunden'],502);
   $data=null;
   if($channel==='test') {
     if(!is_array($json)||!array_is_list($json))respond(['error'=>'Ungültige GitHub Release-Liste'],502);
@@ -260,7 +274,7 @@ if($api!==null) {
    $name=$asset['name']??'';$url=$asset['browser_download_url']??'';
    if(!is_string($name)||!in_array($name,[$zipName,$shaName,$manifestName,$signatureName],true)||!is_string($url))continue;
    // Asset names and redirect targets must originate from the intended repository.
-   $prefix='https://github.com/xDraconix/Bedrock-Control/releases/download/'.$tag.'/';
+   $prefix='https://github.com/'.$sourceRepo.'/releases/download/'.$tag.'/';
    if($url!==$prefix.rawurlencode($name))continue;
    $assetUrls[$name]=$url;
   }
@@ -274,7 +288,7 @@ if($api!==null) {
   respond(['channel'=>$channel,'signature_assets_present'=>$signedAssetsPresent,'trusted_key_configured'=>$trust['trusted_key_configured'],
     'trusted_key_fingerprint'=>$trust['trusted_key_fingerprint'],'trusted_key_error'=>$trust['trusted_key_error'],
     'installed'=>$localVersion,'latest'=>$releaseVersion,'tag'=>$tag,
-    'update_available'=>$upgradeAvailable,'release_url'=>'https://github.com/xDraconix/Bedrock-Control/releases/tag/'.$tag,
+    'update_available'=>$upgradeAvailable,'release_url'=>'https://github.com/'.$sourceRepo.'/releases/tag/'.$tag,
     'published_at'=>is_string($data['published_at']??null)?$data['published_at']:null,
     'notes'=>substr(is_string($data['body']??null)?$data['body']:'',0,10000),
     'assets_complete'=>isset($assetUrls[$zipName],$assetUrls[$shaName]),
