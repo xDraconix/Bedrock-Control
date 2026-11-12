@@ -44,6 +44,15 @@ class DracoRockBrandingTests(unittest.TestCase):
         self.assertIn('class="brand-mark brand-mark-login"',self.page)
         self.assertIn('alt="DracoRock Control Logo"',self.page)
 
+    def test_petrol_frame_palette(self):
+        css=(ROOT/'app/public/assets/app.css').read_text()
+        self.assertIn('--dr-frame:#426674', css)
+        self.assertIn('.server-info-item,.system-metric{', css)
+        self.assertIn('border-left:3px solid #4c8295', css)
+        self.assertIn('.monitor-stat,.monitor-chart-panel{', css)
+        self.assertIn('.server-state.online,.pill.online', css)
+        self.assertIn('assets/app.css?v=3.0.0-petrol2', self.page)
+
     def test_repository_links(self):
         self.assertIn('xDraconix/DracoRock-Control',self.readme)
         self.assertIn('xDraconix/DracoRock-Control',self.publisher)
