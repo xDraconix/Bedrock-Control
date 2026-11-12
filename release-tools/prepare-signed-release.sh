@@ -39,7 +39,7 @@ TEMP=$(mktemp -d)
 trap 'rm -rf -- "$TEMP"' EXIT
 echo '[1/6] Hole den aktuellen main-Branch von GitHub ...'
 git clone --quiet --depth 1 --single-branch --branch main \
-  https://github.com/xDraconix/Bedrock-Control.git "$TEMP/source"
+  https://github.com/xDraconix/DracoRock-Control.git "$TEMP/source"
 cd "$TEMP/source"
 VERSION=$(tr -d '\r\n' < VERSION)
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Ungültige Version.' >&2; exit 1; }
@@ -50,7 +50,7 @@ PUBLIC=system/release/trusted-release-key.pem
 # mistaking authentication/network failures for a missing release.
 if (( PUBLISH )); then
   echo '[1a/7] Prüfe GitHub: Tag und Release dürfen noch nicht existieren ...'
-  REPO='xDraconix/Bedrock-Control'
+  REPO='xDraconix/DracoRock-Control'
   existing_tags=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}") || {
     echo 'GitHub-Tags konnten nicht abgefragt werden.' >&2; exit 1;
   }
@@ -122,7 +122,7 @@ if (( PUBLISH )); then
     "$FINAL/$BASE" "$FINAL/$BASE.manifest" "$FINAL/$BASE.manifest.sig" \
     --repo "$REPO" \
     --target "$(git rev-parse HEAD)" \
-    --title "Bedrock Control PRO $TAG Stable" \
+    --title "DracoRock Control $TAG Stable" \
     --notes-file "$NOTES" \
     --latest
   gh release view "$TAG" --repo "$REPO" --json tagName,isDraft,isPrerelease,assets,url \

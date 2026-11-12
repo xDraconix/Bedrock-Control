@@ -1,4 +1,4 @@
-name: Validate Bedrock Control PRO
+name: Validate DracoRock Control
 
 on:
   pull_request:
@@ -43,6 +43,8 @@ jobs:
               compile(path.read_bytes(), str(path), "exec")
               print("OK:", path)
           PY
+      - name: Test DracoRock branding and signed legacy compatibility
+        run: python3 tests/test_dracorock_branding.py
       - name: Test repository migration release lookup
         run: python3 tests/test_repository_migration.py
       - name: Test player roster and console command validation

@@ -4,7 +4,7 @@
 
 .addon-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0 12px}.addon-toolbar input{flex:1;min-width:220px}.addon-toolbar select{max-width:100%}.addon-info{min-width:0;flex:1}.addon-info>div{margin-top:4px}.addon-warning{color:#ffca83;font-size:12px;font-weight:600}.addon-row{align-items:center}.addon-row button:disabled{cursor:not-allowed;opacity:.45}@media(max-width:650px){.addon-row{align-items:flex-start;flex-direction:column}.addon-toolbar>*{width:100%}}
 
-/* Bedrock Control PRO 2.1 – block-inspired visual refresh */
+/* DracoRock Control – block-inspired visual refresh (legacy base styles) */
 :root{font-family:Segoe UI,Arial,sans-serif;background:#101711;color:#edf5e7;color-scheme:dark}
 body{background:radial-gradient(circle at 80% 0%,#233524 0%,transparent 42%),#101711}
 aside{background:linear-gradient(180deg,#19251c,#101a14);border-right:3px solid #334935}
