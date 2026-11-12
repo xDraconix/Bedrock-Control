@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the v2.9.0 visual rename without breaking legacy signed installs."""
+"""Guard the v3.0.0 visual rename without breaking legacy signed installs."""
 from pathlib import Path
 import re
 import unittest
@@ -19,19 +19,29 @@ class DracoRockBrandingTests(unittest.TestCase):
         cls.applier=(ROOT/'system/usr-local-bin/bedrock-panel-apply-release').read_text()
 
     def test_version_and_visible_branding(self):
-        self.assertEqual((ROOT/'VERSION').read_text().strip(),'2.9.0')
+        self.assertEqual((ROOT/'VERSION').read_text().strip(),'3.0.0')
         for marker in ('<title>DracoRock Control</title>',
                        'DRACOROCK <span>CONTROL</span>',
                        '<b>DRACOROCK</b><small>CONTROL</small>',
                        'DracoRock Control aktualisieren',
-                       'DRACOROCK CONTROL v2.9.0'):
+                       'DRACOROCK CONTROL v3.0.0'):
             self.assertIn(marker,self.page)
         self.assertNotIn('BEDROCK CONTROL PRO',self.page)
         self.assertNotIn('<title>Bedrock Control PRO</title>',self.page)
 
     def test_asset_versions(self):
-        self.assertIn('assets/app.js?v=2.9.0',self.page)
-        self.assertIn('assets/app.css?v=2.9.0',self.page)
+        self.assertIn('assets/app.js?v=3.0.0',self.page)
+        self.assertIn('assets/app.css?v=3.0.0',self.page)
+
+    def test_original_logo_and_safe_asset(self):
+        logo=(ROOT/'app/public/assets/dracorock-mark.svg').read_text()
+        self.assertIn('<svg',logo)
+        self.assertIn('viewBox="0 0 96 96"',logo)
+        self.assertNotIn('<script',logo.lower())
+        self.assertNotIn('http://',logo)
+        self.assertIn('src="assets/dracorock-mark.svg"',self.page)
+        self.assertIn('class="brand-mark-login"',self.page)
+        self.assertIn('alt="DracoRock Control Logo"',self.page)
 
     def test_repository_links(self):
         self.assertIn('xDraconix/DracoRock-Control',self.readme)
