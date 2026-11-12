@@ -1,4 +1,4 @@
-name: Validate Bedrock Control PRO
+name: Validate DracoRock Control
 
 on:
   pull_request:
