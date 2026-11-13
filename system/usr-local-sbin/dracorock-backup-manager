@@ -21,7 +21,7 @@ import uuid
 SERVER = Path("/home/mcserver/minecraft_bedrock")
 BACKUPS = Path("/home/mcserver/backups")
 LOCK = Path("/run/lock/dracorock-backup.lock")
-NAME_RE = re.compile(r"minecraft-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}\\.tar\\.gz\\Z")
+NAME_RE = re.compile(r"minecraft-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}\.tar\.gz\Z")
 MAX_FILES = 100000
 MAX_BYTES = 64 * 1024 ** 3
 
