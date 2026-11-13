@@ -65,3 +65,12 @@ assert(js.includes("canvas.addEventListener('pointermove'"), 'pointer-driven ins
 assert(js.includes("canvas.addEventListener('keydown'"), 'keyboard inspection');
 assert(js.includes("p.samples===0?'Keine Messung':'Wert nicht verfügbar'"),'missing sample semantics');
 console.log('OK: monitoring chart statistics, zero/null distinctions, synchronized tooltip and keyboard hooks');
+
+assert(html.includes('id="dashboardAlerts"'),'dashboard must contain the alert summary');
+assert(html.includes('id="dashboardAlertsDetail"'),'dashboard should link to detailed monitoring');
+assert(js.includes("async function loadDashboardAlerts()"),'dashboard polls existing history endpoint');
+assert(js.includes("api('monitor-history&window=1h')"),'dashboard uses authenticated monitoring API');
+assert(js.includes("if(a.dataset.tab==='overview')loadDashboardAlerts()"),'dashboard reloads on navigation');
+assert(js.includes("if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()"),'dashboard only polls while visible');
+assert(js.includes("description.textContent=alert.message"),'dashboard alerts must not render HTML');
+console.log('OK: overview alert summary, safe rendering and visible-only polling');
