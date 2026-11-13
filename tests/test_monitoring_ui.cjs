@@ -81,6 +81,9 @@ assert(css.includes('#overview .overview-controls'),'responsive grid styles scop
 assert(css.includes('grid-template-columns:minmax(0,1.2fr) minmax(0,0.85fr) minmax(0,1.2fr)'),
  'desktop 3-column layout with narrower middle card');
 assert(css.includes('@media(max-width:1150px)'),'responsive stacking breakpoint');
+assert(css.includes('margin-top:0;'),'avoid double gap after metric cards');
+assert(css.includes('margin-bottom:18px;'),'restore gap before server information cards');
+
 
 assert(html.includes('id="dashboardAlertsDetail"'),'dashboard should link to detailed monitoring');
 assert(js.includes("async function loadDashboardAlerts()"),'dashboard polls existing history endpoint');
