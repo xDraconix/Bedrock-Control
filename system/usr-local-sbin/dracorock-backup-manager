@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""DracoRock v3.2 backup engine, phase 1: offline-only, no service control.
+
+This module intentionally has no browser/sudo integration. The existing v3.1
+backup workflow stays unchanged until the new engine passes isolated tests.
+"""
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import subprocess
+import tarfile
+import tempfile
+import time
+import uuid
+
+SERVER = Path("/home/mcserver/minecraft_bedrock")
+BACKUPS = Path("/home/mcserver/backups")
+LOCK = Path("/run/lock/dracorock-backup.lock")
+NAME_RE = re.compile(r"minecraft-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}\\.tar\\.gz\\Z")
+MAX_FILES = 100000
+MAX_BYTES = 64 * 1024 ** 3
+
+
+class BackupError(Exception):
+    pass
+
+
+def require(condition, message):
+    if not condition:
+        raise BackupError(message)
+
+
+def offline():
+    service = subprocess.run(
+        ["/usr/bin/systemctl", "is-active", "--quiet", "mcbedrock.service"],
+        check=False,
+    )
+    process = subprocess.run(
+        ["/usr/bin/pgrep", "-u", "mcserver", "-x", "bedrock_server"],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    require(service.returncode != 0 and process.returncode != 0,
+            "Minecraft muss fuer eine konsistente Sicherung gestoppt sein")
+
+
+def check_source():
+    require(SERVER.is_dir() and not SERVER.is_symlink(), "Serververzeichnis ungueltig")
+    require((SERVER / "server.properties").is_file(), "server.properties fehlt")
+    count = 0
+    total = 0
+    for root, dirs, files in os.walk(SERVER, followlinks=False):
+        for name in dirs + files:
+            entry = Path(root) / name
+            info = entry.lstat()
+            require(stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode),
+                    "Links und Spezialdateien sind verboten")
+            if stat.S_ISREG(info.st_mode):
+                require(info.st_nlink == 1, "Hardlinks sind verboten")
+                count += 1
+                total += info.st_size
+                require(count <= MAX_FILES and total <= MAX_BYTES,
+                        "Sicherheitslimit ueberschritten")
+    return count, total
+
+
+def check_backup_dir():
+    require(BACKUPS.is_dir() and not BACKUPS.is_symlink(),
+            "Backup-Verzeichnis fehlt oder ist unsicher")
+    info = BACKUPS.stat()
+    require(info.st_uid == 0 and not (stat.S_IMODE(info.st_mode) & 0o002),
+            "Backup-Verzeichnis muss root gehoeren und darf nicht weltweit beschreibbar sein")
+
+
+def digest(path):
+    sha = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            sha.update(chunk)
+    return sha.hexdigest()
+
+
+def validate_archive(path):
+    require(path.is_file() and not path.is_symlink(), "Archiv fehlt oder ist ein Symlink")
+    count = 0
+    with tarfile.open(path, "r:gz") as archive:
+        for item in archive:
+            require(item.isfile() or item.isdir(), "Unerlaubter Archiv-Eintrag")
+            parts = Path(item.name).parts
+            require(bool(parts) and parts[0] == SERVER.name and
+                    all(part not in ("..", ".") for part in parts) and
+                    not item.name.startswith("/"), "Unsicherer Archivpfad")
+            if item.isfile():
+                count += 1
+                require(count <= MAX_FILES and item.size <= MAX_BYTES,
+                        "Archiv-Limit ueberschritten")
+                stream = archive.extractfile(item)
+                require(stream is not None, "Archiv-Eintrag unlesbar")
+                while stream.read(1024 * 1024):
+                    pass
+    return count
+
+
+def create():
+    offline()
+    check_backup_dir()
+    files, source_bytes = check_source()
+    usage = os.statvfs(BACKUPS)
+    free = usage.f_bavail * usage.f_frsize
+    require(free >= source_bytes + max(256 * 1024 ** 2, source_bytes // 10),
+            "Nicht genug freier Speicher fuer die Sicherung")
+    name = "minecraft-" + time.strftime("%Y%m%d-%H%M%S", time.gmtime()) + "-" + uuid.uuid4().hex[:8] + ".tar.gz"
+    target = BACKUPS / name
+    temp = None
+    manifest_temp = None
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=".dracorock-", suffix=".part", dir=BACKUPS)
+        temp = Path(temp_name)
+        with os.fdopen(fd, "wb") as output:
+            with tarfile.open(fileobj=output, mode="w:gz", dereference=False) as archive:
+                archive.add(SERVER, arcname=SERVER.name, recursive=True)
+            output.flush()
+            os.fsync(output.fileno())
+        offline()
+        require(validate_archive(temp) == files, "Dateianzahl im Archiv stimmt nicht")
+        sha = digest(temp)
+        meta = {"schema": 1, "archive": name, "sha256": sha,
+                "size": temp.stat().st_size, "files": files,
+                "created_utc": int(time.time()), "source_bytes": source_bytes}
+        fd, meta_name = tempfile.mkstemp(prefix=".dracorock-", suffix=".json.part", dir=BACKUPS)
+        manifest_temp = Path(meta_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump(meta, output, sort_keys=True)
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temp, 0o640)
+        os.chmod(manifest_temp, 0o640)
+        # Publish the data first; if interrupted, an orphan archive is never
+        # treated as verified because its sidecar is absent.
+        os.replace(temp, target)
+        temp = None
+        os.replace(manifest_temp, BACKUPS / (name + ".json"))
+        manifest_temp = None
+        directory_fd = os.open(BACKUPS, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        return meta
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+        if manifest_temp is not None:
+            manifest_temp.unlink(missing_ok=True)
+
+
+def verify(name):
+    require(NAME_RE.fullmatch(name) is not None, "Ungueltiger Archivname")
+    check_backup_dir()
+    archive = BACKUPS / name
+    sidecar = BACKUPS / (name + ".json")
+    require(sidecar.is_file() and not sidecar.is_symlink(), "Pruefmanifest fehlt")
+    meta = json.loads(sidecar.read_text(encoding="utf-8"))
+    require(meta.get("schema") == 1 and meta.get("archive") == name,
+            "Manifest passt nicht zum Archiv")
+    require(archive.is_file() and not archive.is_symlink(), "Archiv fehlt")
+    require(archive.stat().st_size == meta.get("size"), "Archivgroesse stimmt nicht")
+    require(digest(archive) == meta.get("sha256"), "SHA-256-Pruefung fehlgeschlagen")
+    require(validate_archive(archive) == meta.get("files"), "Archivdateien stimmen nicht")
+    return {"ok": True, "archive": name, "sha256": meta["sha256"]}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="DracoRock Backup-Engine (Phase 1)")
+    parser.add_argument("command", choices=("create", "verify"))
+    parser.add_argument("archive", nargs="?")
+    args = parser.parse_args()
+    require(os.geteuid() == 0, "Nur als root ausfuehrbar")
+    require((args.command == "verify") == (args.archive is not None),
+            "verify benoetigt einen Archivnamen; create akzeptiert keinen")
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with LOCK.open("a+") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise BackupError("Ein Backup-Auftrag laeuft bereits") from exc
+        result = create() if args.command == "create" else verify(args.archive)
+        print(json.dumps(result, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (BackupError, OSError, ValueError, tarfile.TarError) as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False))
+        raise SystemExit(1)
