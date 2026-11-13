@@ -72,7 +72,7 @@ def validated_system_plan(installer):
         require(isinstance(src,str) and src.startswith('system/') and '..' not in Path(src).parts,
                 'Ungültiger System-Quelldateipfad')
         require(isinstance(dst,str) and dst.startswith(('/usr/local/bin/bedrock-panel-',
-                  '/usr/local/sbin/bedrock-','/etc/systemd/system/bedrock-panel-self-update.service',
+                  '/usr/local/sbin/bedrock-', '/usr/local/sbin/dracorock-backup-manager','/etc/systemd/system/bedrock-panel-self-update.service',
                   '/etc/systemd/system/bedrock-monitor.service',
                   '/etc/systemd/system/bedrock-monitor.timer',
                   '/etc/sudoers.d/bedrock-control-pro','/etc/apache2/sites-available/bedrock-control-pro.conf',
