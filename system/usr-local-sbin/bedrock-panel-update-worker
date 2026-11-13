@@ -53,6 +53,7 @@ else
    exit 1
  }
  /usr/bin/install -d -m 0750 -o root -g root "$BACKUPS"
+ "$ENGINE" preflight
  was_active=0
  if /usr/bin/systemctl is-active --quiet "$SERVICE"; then
    was_active=1
