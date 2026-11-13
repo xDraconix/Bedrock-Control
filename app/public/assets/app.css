@@ -495,3 +495,46 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 .monitor-alert-warning p{color:#e3cba7}
 .monitor-alert-critical{background:#38252c;border-color:#8b5059;border-left-color:#ff8893;color:#ffd3d7}
 .monitor-alert-critical p{color:#e3b3ba}
+
+/* v3.1: server warnings as the middle, compact dashboard control card. */
+#overview .overview-controls{
+ display:grid;
+ grid-template-columns:minmax(0,1.2fr) minmax(0,0.85fr) minmax(0,1.2fr);
+ gap:16px;
+ align-items:stretch;
+ margin-top:18px;
+}
+#overview .overview-controls>.card{min-width:0;margin-bottom:0}
+#overview .dashboard-alert-card{
+ display:flex;
+ flex-direction:column;
+ gap:10px;
+ padding:20px;
+}
+#overview .dashboard-alert-card h2{margin:0}
+#overview .dashboard-alert-card .monitor-alerts{
+ margin:0;
+ gap:7px;
+ flex:1;
+}
+#overview .dashboard-alert-card .monitor-alert{
+ padding:9px 11px;
+ font-size:12px;
+ overflow-wrap:anywhere;
+}
+#overview .dashboard-alert-card .monitor-alert strong{font-size:13px}
+#overview .dashboard-alert-card .monitor-alert p{font-size:12px}
+#overview .dashboard-alert-card #dashboardAlertsDetail{
+ align-self:flex-start;
+ font-size:12px;
+ padding:9px 12px;
+ white-space:normal;
+}
+@media(max-width:1150px){
+ #overview .overview-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #overview .overview-controls>.dashboard-alert-card{grid-column:1/-1}
+}
+@media(max-width:700px){
+ #overview .overview-controls{grid-template-columns:1fr}
+ #overview .overview-controls>.dashboard-alert-card{grid-column:auto}
+}
