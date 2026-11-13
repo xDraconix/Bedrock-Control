@@ -1,0 +1,27 @@
+name: Backup Manager v3.2 Tests
+
+on:
+  push:
+    branches:
+      - feature/intelligent-backup-manager-v3.2.0
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'system/usr-local-sbin/dracorock-backup-manager'
+      - 'tests/test_backup_manager.py'
+      - '.github/workflows/backup-manager.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  backup-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile backup engine and tests
+        run: |
+          python3 -m py_compile system/usr-local-sbin/dracorock-backup-manager tests/test_backup_manager.py
+      - name: Run isolated backup engine tests
+        run: python3 -m unittest discover -s tests -p test_backup_manager.py -v
