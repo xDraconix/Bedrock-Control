@@ -2,19 +2,23 @@
 
 DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debian 13** über ein lokales Webpanel. Minecraft kann auf einem frischen Debian-System direkt über das Panel installiert werden.
 
-## In Entwicklung: v3.1.0 – Intelligente Serverüberwachung
+## Version und Hauptfunktionen
 
-Die vorhandenen Monitoring-Messungen werden auf Ausfälle des Messdatensammlers, länger andauernde Serverausfälle, wiederholte beobachtete Neustarts und hohe Dienst-RAM-Werte geprüft. Im Live-Monitoring werden diese Warnungen mit Schweregrad eingeblendet. **Kein automatischer Neustart, keine externe Benachrichtigung; ausschließlich Testbranch.** Details und Grenzwerte: [v3.1.0 Entwicklungsnotizen](docs/releases/v3.1.0.md).
+**DracoRock Control v3.1.0** ist der freigegebene Release-Stand dieses Branches. Das aktuelle GitHub-Stable-Release wird beim signierten Veröffentlichen gesondert erstellt. Die bisherige stabile Version ist v3.0.0.
 
-## Version
+### Intelligentes Live-Monitoring und Dashboard-Warnungen
 
-**v2.9.0 Stable** ist die veröffentlichte Version von DracoRock Control. **v3.0.0** ist der nächste, noch unveröffentlichte Design-Entwicklungsstand.
+- Automatische Auswertung der bestehenden lokalen Messungen: Offline-Ausfälle, Monitoring-Aussetzer, hoher Dienst-RAM und wiederholte beobachtete Serverstarts.
+- Dezente Statusanzeige direkt zwischen Serversteuerung und Update & Sicherung sowie ausführliche Warnungen im Live-Monitoring.
+- Keine automatischen Neustarts oder Benachrichtigungen; das Monitoring läuft weiterhin über den vorhandenen systemd-Timer.
 
-### DracoRock Control 3.0 – Designvorschau (in Entwicklung)
+### Mojang-Updateanzeige
 
-Ein eigenständiges SVG-Logo, ein überarbeitetes dunkles Dashboard, ein klareres Login und verbesserte mobile Darstellung. Alle Verwaltungsfunktionen, API-Endpunkte, Datenbanken, Systemdienste und signierten Updateformate bleiben erhalten.
+Unter **Installierte Version** zeigt das Dashboard die neueste stabile Linux-Bedrock-Serverversion aus den offiziellen Mojang-Download-Metadaten. Falls eine höhere Version vorliegt, öffnet ein Link die Minecraft-Updates-Seite. Die reine Versionsprüfung verändert keine Serverdateien.
 
-Der V3-Code wird **nicht auf dem Produktionsserver** installiert, bevor der Testcontainer ein signiertes Upgrade erfolgreich bestanden hat. Details: [v3.0.0 Entwicklungsnotizen](docs/releases/v3.0.0.md).
+Die grafische Identität aus v3.0.0 mit eigenem SVG-Logo, Petrol-Farben und kompatiblem Ed25519-Releaseformat bleibt erhalten.
+
+[Release Notes v3.1.0](docs/releases/v3.1.0.md) · [Release Notes v3.0.0](docs/releases/v3.0.0.md)
 
 ## Neu in der Entwicklung: Monitoring 2.8.0
 
