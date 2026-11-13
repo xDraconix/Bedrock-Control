@@ -266,6 +266,28 @@ for(const def of monitorDefinitions){
   setMonitorHover(index,def.kind);
  });
 }
+// v3.1: only render server-computed diagnostics. textContent prevents markup injection.
+function renderMonitoringAlerts(alerts){
+ const root=$('monitorAlerts');
+ root.replaceChildren();
+ if(!Array.isArray(alerts)){
+  const note=document.createElement('p');note.className='muted tiny';
+  note.textContent='Warnstatus derzeit nicht verfügbar.';root.append(note);return;
+ }
+ if(!alerts.length){
+  const ok=document.createElement('div');ok.className='monitor-alert monitor-alert-ok';
+  ok.textContent='✓ Keine aktuellen Warnungen – Monitoring und Dienstwerte unauffällig.';
+  root.append(ok);return;
+ }
+ for(const alert of alerts.slice(0,8)){
+  if(!alert||typeof alert.title!=='string'||typeof alert.message!=='string')continue;
+  const item=document.createElement('div');
+  item.className='monitor-alert monitor-alert-'+(alert.severity==='critical'?'critical':'warning');
+  const title=document.createElement('strong');title.textContent=alert.title;
+  const message=document.createElement('p');message.textContent=alert.message;
+  item.append(title,message);root.append(item);
+ }
+}
 async function loadMonitoring(){
  if(monitoringBusy)return;
  monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
@@ -273,6 +295,7 @@ async function loadMonitoring(){
   const d=await api('monitor-history&window='+encodeURIComponent(monitoringWindow));
   if(!Array.isArray(d.points)||d.points.length>450)throw Error('Ungültige Monitoring-Antwort');
   monitoringPoints=d.points;
+  renderMonitoringAlerts(d.alerts);
   monitorHoverIndex=null;monitorHoverMetric=null;
   const latest=d.latest;
   const fresh=latest && Number.isInteger(latest.ts) && Date.now()/1000-latest.ts<180;
@@ -283,7 +306,7 @@ async function loadMonitoring(){
   txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+' Messungen · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
   updateMonitorSummaries();
   redrawMonitoring();monitorTooltip();
- }catch(e){monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
+ }catch(e){renderMonitoringAlerts(null);monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
  finally{monitoringBusy=false}
 }
 $('monitorReload').addEventListener('click',loadMonitoring);
