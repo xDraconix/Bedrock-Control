@@ -25,6 +25,8 @@ jobs:
           python3 -m py_compile system/usr-local-sbin/dracorock-backup-manager tests/test_backup_manager.py
       - name: Validate backup worker and installer shell syntax
         run: bash -n system/usr-local-sbin/bedrock-panel-update-worker install.sh
+      - name: Compile signed-update and recovery tools
+        run: python3 -m py_compile system/usr-local-bin/bedrock-panel-system-plan system/usr-local-bin/bedrock-panel-apply-release system/usr-local-bin/bedrock-panel-recovery
       - name: Test signed-update component allowlist
         run: python3 tests/test_system_update_plan.py
       - name: Run isolated backup engine tests
