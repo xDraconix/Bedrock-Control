@@ -484,3 +484,72 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 #players .player-action[aria-pressed="true"]{
  box-shadow:0 0 0 1px rgba(120,192,218,.3),inset 0 0 0 1px rgba(255,255,255,.07);
 }
+
+/* v3.1 – intelligent monitoring alert panel; status colors only. */
+.monitor-alerts{display:grid;gap:9px;margin:12px 0 21px}
+.monitor-alert{border:1px solid #477083;border-left:4px solid #75b0cb;background:#172c37;border-radius:9px;padding:13px 17px;color:#d8ecf5;line-height:1.55}
+.monitor-alert strong{display:block;font-size:14px;margin-bottom:3px}
+.monitor-alert p{font-size:13px;margin:0;color:#bdd2dd}
+.monitor-alert-ok{background:#19343a;border-color:#396a70;border-left-color:#79d5bc;color:#d4f8ed}
+.monitor-alert-warning{background:#302c26;border-color:#7b6140;border-left-color:#e6ae62;color:#ffdfad}
+.monitor-alert-warning p{color:#e3cba7}
+.monitor-alert-critical{background:#38252c;border-color:#8b5059;border-left-color:#ff8893;color:#ffd3d7}
+.monitor-alert-critical p{color:#e3b3ba}
+
+/* v3.1: server warnings as the middle, compact dashboard control card. */
+#overview .overview-controls{
+ display:grid;
+ grid-template-columns:minmax(0,1.2fr) minmax(0,0.85fr) minmax(0,1.2fr);
+ gap:16px;
+ align-items:stretch;
+ /* Metric cards already provide 18px below the first row; avoid double spacing. */
+ margin-top:0;
+ /* The middle row has zero card margins, so create the next row gap here. */
+ margin-bottom:18px;
+}
+#overview .overview-controls>.card{min-width:0;margin-bottom:0}
+#overview .dashboard-alert-card{
+ display:flex;
+ flex-direction:column;
+ gap:10px;
+ padding:20px;
+}
+#overview .dashboard-alert-card h2{margin:0}
+#overview .dashboard-alert-card .monitor-alerts{
+ margin:0;
+ gap:7px;
+ flex:1;
+}
+#overview .dashboard-alert-card .monitor-alert{
+ padding:9px 11px;
+ font-size:12px;
+ overflow-wrap:anywhere;
+}
+#overview .dashboard-alert-card .monitor-alert strong{font-size:13px}
+#overview .dashboard-alert-card .monitor-alert p{font-size:12px}
+#overview .dashboard-alert-card #dashboardAlertsDetail{
+ align-self:flex-start;
+ font-size:12px;
+ padding:9px 12px;
+ white-space:normal;
+}
+@media(max-width:1150px){
+ #overview .overview-controls{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+ #overview .dashboard-alert-card{padding:17px}
+}
+
+/* v3.1 – compact official Mojang update indication inside version metric. */
+#overview .bedrock-update-info{
+ display:flex;flex-wrap:wrap;align-items:center;column-gap:9px;row-gap:5px;
+ margin-top:10px;padding-top:8px;border-top:1px solid #385663;
+ font-size:12px;line-height:1.45;color:#b5d1de;
+}
+#overview .bedrock-update-info.update-current{color:#a7e2d1}
+#overview .bedrock-update-info.update-available{color:#f5cf8c}
+#overview .bedrock-update-info.update-unknown{color:#b5c7ce}
+#overview .bedrock-update-action{
+ padding:0;color:#b2def2;font-size:12px;text-decoration:underline;text-underline-offset:3px;
+}
+#overview .bedrock-update-action[hidden]{display:none}

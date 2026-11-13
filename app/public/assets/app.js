@@ -88,6 +88,42 @@ async function status(){try{
  const p=$('statusPill');p.textContent={online:'● Server online',starting:'● Server startet / NetherNet wartet',offline:'● Server offline',failed:'● Serverfehler'}[state];p.className='pill '+state;
  }catch(e){if(e.message==='Nicht angemeldet'){$('app').hidden=true;$('login').hidden=false;return;}showNotice(e.message,true)}
 }
+// Check Mojang's official stable Linux Bedrock version without downloading a server.
+let bedrockVersionBusy=false,bedrockVersionCheckedAt=0;
+async function loadBedrockUpdate(force=false){
+ if(bedrockVersionBusy||$('app').hidden)return;
+ if(!force && bedrockVersionCheckedAt && Date.now()-bedrockVersionCheckedAt<3600000)return;
+ bedrockVersionBusy=true;
+ const state=$('bedrockUpdateState'),action=$('bedrockUpdateAction'),panel=$('bedrockUpdateInfo');
+ state.textContent='Mojang-Version wird geprüft …';
+ action.hidden=true;
+ panel.classList.remove('update-available','update-current','update-unknown');
+ try{
+  const d=await api('bedrock-update-check');
+  if(d.ok!==true||typeof d.latest_version!=='string'||!/^[0-9]+(?:\.[0-9]+){2,4}$/.test(d.latest_version))
+   throw Error('Ungültige Versionsantwort');
+  if(d.update_available===true){
+   state.textContent='Update verfügbar: '+d.latest_version;
+   panel.classList.add('update-available');
+   action.hidden=false;
+  }else if(d.update_available===false){
+   state.textContent='Mojang: aktuell ('+d.latest_version+')';
+   panel.classList.add('update-current');
+  }else{
+   state.textContent='Mojang: '+d.latest_version+' · installierte Version unbekannt';
+   panel.classList.add('update-unknown');
+  }
+  bedrockVersionCheckedAt=Date.now();
+ }catch(e){
+  state.textContent='Mojang-Prüfung nicht verfügbar';
+  panel.classList.add('update-unknown');
+  // Retry errors in ten minutes rather than on every status refresh.
+  bedrockVersionCheckedAt=Date.now()-3000000;
+ }finally{bedrockVersionBusy=false}
+}
+$('bedrockUpdateAction').addEventListener('click',()=>document.querySelector('[data-tab="update"]').click());
+setInterval(()=>{if(!$('app').hidden)loadBedrockUpdate()},600000);
+
 // Monitoring consumes only bounded, aggregated server metrics. No external chart libraries.
 // Monitoring charts use the same time grid for all metrics. No third-party code.
 let monitoringBusy=false, monitoringPoints=[], monitoringWindow='24h',monitorHoverIndex=null,monitorHoverMetric=null;
@@ -266,6 +302,64 @@ for(const def of monitorDefinitions){
   setMonitorHover(index,def.kind);
  });
 }
+// v3.1: only render server-computed diagnostics. textContent prevents markup injection.
+function renderMonitoringAlerts(alerts){
+ const root=$('monitorAlerts');
+ root.replaceChildren();
+ if(!Array.isArray(alerts)){
+  const note=document.createElement('p');note.className='muted tiny';
+  note.textContent='Warnstatus derzeit nicht verfügbar.';root.append(note);return;
+ }
+ if(!alerts.length){
+  const ok=document.createElement('div');ok.className='monitor-alert monitor-alert-ok';
+  ok.textContent='✓ Keine aktuellen Warnungen – Monitoring und Dienstwerte unauffällig.';
+  root.append(ok);return;
+ }
+ for(const alert of alerts.slice(0,8)){
+  if(!alert||typeof alert.title!=='string'||typeof alert.message!=='string')continue;
+  const item=document.createElement('div');
+  item.className='monitor-alert monitor-alert-'+(alert.severity==='critical'?'critical':'warning');
+  const title=document.createElement('strong');title.textContent=alert.title;
+  const message=document.createElement('p');message.textContent=alert.message;
+  item.append(title,message);root.append(item);
+ }
+}
+// Overview reuses the authenticated, read-only monitoring history API.
+let dashboardAlertsBusy=false;
+async function loadDashboardAlerts(){
+ if(dashboardAlertsBusy||$('app').hidden||$('overview').hidden)return;
+ dashboardAlertsBusy=true;
+ try{
+  const data=await api('monitor-history&window=1h');
+  const root=$('dashboardAlerts');
+  root.replaceChildren();
+  if(!Array.isArray(data.alerts))throw Error('Warnstatus fehlt');
+  const alerts=data.alerts.slice(0,8);
+  if(!alerts.length){
+   const ok=document.createElement('div');
+   ok.className='monitor-alert monitor-alert-ok';
+   ok.textContent='✓ Keine aktuellen Warnungen – Monitoring unauffällig.';
+   root.append(ok);
+  }else{
+   for(const alert of alerts){
+    if(!alert||typeof alert.title!=='string'||typeof alert.message!=='string')continue;
+    const item=document.createElement('div');
+    item.className='monitor-alert monitor-alert-'+(alert.severity==='critical'?'critical':'warning');
+    const title=document.createElement('strong');title.textContent=alert.title;
+    const description=document.createElement('p');description.textContent=alert.message;
+    item.append(title,description);root.append(item);
+   }
+  }
+ }catch(error){
+  const root=$('dashboardAlerts');
+  root.replaceChildren();
+  const note=document.createElement('p');note.className='muted tiny';
+  note.textContent='Warnstatus nicht verfügbar – Live-Monitoring prüfen.';
+  root.append(note);
+ }finally{dashboardAlertsBusy=false}
+}
+$('dashboardAlertsDetail').addEventListener('click',()=>document.querySelector('[data-tab="monitor"]').click());
+setInterval(()=>{if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()},60000);
 async function loadMonitoring(){
  if(monitoringBusy)return;
  monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
@@ -273,6 +367,7 @@ async function loadMonitoring(){
   const d=await api('monitor-history&window='+encodeURIComponent(monitoringWindow));
   if(!Array.isArray(d.points)||d.points.length>450)throw Error('Ungültige Monitoring-Antwort');
   monitoringPoints=d.points;
+  renderMonitoringAlerts(d.alerts);
   monitorHoverIndex=null;monitorHoverMetric=null;
   const latest=d.latest;
   const fresh=latest && Number.isInteger(latest.ts) && Date.now()/1000-latest.ts<180;
@@ -283,7 +378,7 @@ async function loadMonitoring(){
   txt('monitorState',(Number.isInteger(d.samples_count)?d.samples_count:d.points.filter(p=>p.samples>0).length)+' Messungen · Intervall 60 Sekunden · '+(fresh?'Aktuelle Messungen verfügbar':'Keine aktuelle Messung – Timer prüfen'));
   updateMonitorSummaries();
   redrawMonitoring();monitorTooltip();
- }catch(e){monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
+ }catch(e){renderMonitoringAlerts(null);monitoringPoints=[];monitorHoverIndex=null;monitorHoverMetric=null;updateMonitorSummaries();redrawMonitoring();monitorTooltip();txt('monitorState','Monitoring nicht verfügbar: '+e.message)}
  finally{monitoringBusy=false}
 }
 $('monitorReload').addEventListener('click',loadMonitoring);
@@ -291,7 +386,7 @@ $('monitorWindow').addEventListener('change',e=>{monitoringWindow=e.target.value
 window.addEventListener('resize',()=>{if(!$('monitor').hidden){redrawMonitoring();monitorTooltip()}});
 setInterval(()=>{if(!$('app').hidden&&!$('monitor').hidden)loadMonitoring()},60000);
 
-async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs()}async function action(name){
+async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs();loadDashboardAlerts();loadBedrockUpdate()}async function action(name){
  if(busy)return;
  const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
  if(!confirm(labels[name]+'?'))return;
@@ -426,7 +521,7 @@ $('panelStartUpdate').addEventListener('click',async()=>{
 });
 $('panelShowUpdateLog').addEventListener('click',pollPanelUpdate);
 $('panelCheckReleases').addEventListener('click',loadPanelRelease);
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',refreshAll);$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});csrf=d.csrf;$('password').value='';txt('loginError','');showApp()}catch(e){txt('loginError',e.message)}});document.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>action(b.dataset.action)));document.querySelectorAll('[data-tab]').forEach(a=>a.addEventListener('click',()=>{document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('selected'));a.classList.add('selected');document.querySelectorAll('.tab').forEach(x=>x.hidden=x.id!==a.dataset.tab);txt('pageTitle',({overview:'Serverübersicht',update:'Minecraft-Updates','panel-update':'Panel-Updates',worlds:'Welten-Manager',addons:'Add-on Manager',settings:'Server-Einstellungen',console:'Live-Konsole',monitor:'Live-Servermonitoring',players:'Spielerverwaltung',backups:'Backup-Verwaltung',logs:'Systemprotokolle'})[a.dataset.tab]);if(a.dataset.tab==='panel-update')loadPanelRelease();if(a.dataset.tab==='logs')logs();if(a.dataset.tab==='backups')backups();if(a.dataset.tab==='addons')loadAddons();if(a.dataset.tab==='settings')loadProperties();if(a.dataset.tab==='worlds')loadWorlds();if(a.dataset.tab==='console')loadConsole();if(a.dataset.tab==='overview')loadDashboardAlerts();if(a.dataset.tab==='monitor')loadMonitoring();if(a.dataset.tab==='players'){status();loadPlayers();loadOnlinePlayers()}}));$('refresh').addEventListener('click',()=>{refreshAll();loadBedrockUpdate(true)});$('reloadLogs').addEventListener('click',logs);$('logType').addEventListener('change',logs);$('updateLogButton').addEventListener('click',()=>{document.querySelector('[data-tab="logs"]').click();$('logType').value='update';logs()});$('logout').addEventListener('click',async()=>{try{await api('logout',{method:'POST',headers:{'X-CSRF-Token':csrf}})}finally{location.reload()}});api('session').then(d=>{if(d.authenticated){csrf=d.csrf;showApp()}}).catch(()=>{});setInterval(()=>{if(!$('app').hidden)status()},15000);
 
 let addonPacks=[];
 async function loadAddons(){const el=$('addonList');el.textContent='Lade Pakete ...';try{const d=await api('addons');addonPacks=d.packs||[];renderAddons()}catch(e){el.textContent='Fehler: '+e.message}}

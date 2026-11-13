@@ -65,3 +65,38 @@ assert(js.includes("canvas.addEventListener('pointermove'"), 'pointer-driven ins
 assert(js.includes("canvas.addEventListener('keydown'"), 'keyboard inspection');
 assert(js.includes("p.samples===0?'Keine Messung':'Wert nicht verfügbar'"),'missing sample semantics');
 console.log('OK: monitoring chart statistics, zero/null distinctions, synchronized tooltip and keyboard hooks');
+
+assert(html.includes('id="dashboardAlerts"'),'dashboard must contain the alert summary');
+const overviewMarkup=html.slice(html.indexOf('<section id="overview"'),html.indexOf('<section id="monitor"'));
+assert(overviewMarkup.includes('class="cols overview-controls"'),'dashboard has compact controls row');
+const cardOrder=[
+ overviewMarkup.indexOf('<h2>Serversteuerung</h2>'),
+ overviewMarkup.indexOf('<h2>Serverwarnungen</h2>'),
+ overviewMarkup.indexOf('<h2>Update & Sicherung</h2>')
+];
+assert(cardOrder[0]>=0&&cardOrder[0]<cardOrder[1]&&cardOrder[1]<cardOrder[2],
+ 'server warnings card sits between server controls and backup/update');
+const css=fs.readFileSync(path.join(base,'app/public/assets/app.css'),'utf8');
+assert(css.includes('#overview .overview-controls'),'responsive grid styles scoped to overview');
+assert(css.includes('grid-template-columns:minmax(0,1.2fr) minmax(0,0.85fr) minmax(0,1.2fr)'),
+ 'desktop 3-column layout with narrower middle card');
+assert(css.includes('@media(max-width:1150px)'),'responsive stacking breakpoint');
+assert(css.includes('margin-top:0;'),'avoid double gap after metric cards');
+assert(css.includes('margin-bottom:18px;'),'restore gap before server information cards');
+
+
+assert(html.includes('id="dashboardAlertsDetail"'),'dashboard should link to detailed monitoring');
+assert(js.includes("async function loadDashboardAlerts()"),'dashboard polls existing history endpoint');
+assert(js.includes("api('monitor-history&window=1h')"),'dashboard uses authenticated monitoring API');
+assert(js.includes("if(a.dataset.tab==='overview')loadDashboardAlerts()"),'dashboard reloads on navigation');
+assert(js.includes("if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()"),'dashboard only polls while visible');
+assert(js.includes("description.textContent=alert.message"),'dashboard alerts must not render HTML');
+console.log('OK: overview alert summary, safe rendering and visible-only polling');
+
+assert(html.includes('id="bedrockUpdateState"'),'installed version card shows Mojang status');
+assert(html.includes('id="bedrockUpdateAction"'),'explicit navigation to Minecraft updater');
+assert(js.includes("api('bedrock-update-check')"),'browser checks authenticated version endpoint');
+assert(js.includes("bedrockVersionCheckedAt<3600000"),'cache updates for one hour');
+assert(js.includes("if(d.update_available===true)"),'only show update CTA when newer stable version exists');
+assert(js.includes("document.querySelector('[data-tab=\"update\"]').click()"),'CTA opens Minecraft updates tab');
+console.log('OK: dashboard Mojang update status and no automatic Minecraft update');
