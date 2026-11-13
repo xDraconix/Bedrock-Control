@@ -183,6 +183,8 @@ install -d -m 0700 -o root -g root /var/lib/bedrock-panel-update-staging
 for f in start_server.sh stop_server.sh mcbedrock.service; do
   install -m 0644 -o root -g root "$ROOT/system/setup-assets/$f" "/usr/local/share/bedrock-control-pro/$f"
 done
+# Install verified backup engine before the panel worker can invoke it.
+install -m 0755 -o root -g root "$ROOT/system/usr-local-sbin/dracorock-backup-manager" /usr/local/sbin/dracorock-backup-manager
 for file in "$ROOT"/system/usr-local-sbin/bedrock-*; do
   install -m 0755 -o root -g root "$file" "/usr/local/sbin/$(basename "$file")"
 done
