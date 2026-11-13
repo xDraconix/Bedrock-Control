@@ -92,3 +92,11 @@ assert(js.includes("if(a.dataset.tab==='overview')loadDashboardAlerts()"),'dashb
 assert(js.includes("if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()"),'dashboard only polls while visible');
 assert(js.includes("description.textContent=alert.message"),'dashboard alerts must not render HTML');
 console.log('OK: overview alert summary, safe rendering and visible-only polling');
+
+assert(html.includes('id="bedrockUpdateState"'),'installed version card shows Mojang status');
+assert(html.includes('id="bedrockUpdateAction"'),'explicit navigation to Minecraft updater');
+assert(js.includes("api('bedrock-update-check')"),'browser checks authenticated version endpoint');
+assert(js.includes("bedrockVersionCheckedAt<3600000"),'cache updates for one hour');
+assert(js.includes("if(d.update_available===true)"),'only show update CTA when newer stable version exists');
+assert(js.includes("document.querySelector('[data-tab=\"update\"]').click()"),'CTA opens Minecraft updates tab');
+console.log('OK: dashboard Mojang update status and no automatic Minecraft update');
