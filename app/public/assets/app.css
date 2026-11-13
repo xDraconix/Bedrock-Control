@@ -539,3 +539,17 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
 @media(max-width:700px){
  #overview .dashboard-alert-card{padding:17px}
 }
+
+/* v3.1 – compact official Mojang update indication inside version metric. */
+#overview .bedrock-update-info{
+ display:flex;flex-wrap:wrap;align-items:center;column-gap:9px;row-gap:5px;
+ margin-top:10px;padding-top:8px;border-top:1px solid #385663;
+ font-size:12px;line-height:1.45;color:#b5d1de;
+}
+#overview .bedrock-update-info.update-current{color:#a7e2d1}
+#overview .bedrock-update-info.update-available{color:#f5cf8c}
+#overview .bedrock-update-info.update-unknown{color:#b5c7ce}
+#overview .bedrock-update-action{
+ padding:0;color:#b2def2;font-size:12px;text-decoration:underline;text-underline-offset:3px;
+}
+#overview .bedrock-update-action[hidden]{display:none}
