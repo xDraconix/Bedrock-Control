@@ -99,3 +99,31 @@ assert 'ExecStart=/usr/local/sbin/bedrock-monitor-manager sample' in service
 assert 'OnUnitActiveSec=1min' in timer
 assert 'WantedBy=timers.target' in timer
 print('OK: persistent systemd service and timer configuration')
+
+# v3.1 – alert evaluation is deterministic and read-only.
+import sqlite3
+def alert_fixture(rows, now):
+    db=sqlite3.connect(':memory:')
+    db.execute('CREATE TABLE samples(ts INTEGER PRIMARY KEY,online INTEGER,ram_bytes INTEGER)')
+    db.executemany('INSERT INTO samples VALUES(?,?,?)',rows)
+    result=mod.monitoring_alerts(db,now)
+    db.close()
+    return {entry['code']:entry for entry in result}
+
+now=10_000
+assert 'no-data' in alert_fixture([],now)
+assert 'collector-stale' in alert_fixture([(now-181,1,400_000_000)],now)
+assert not alert_fixture([(now-60,1,400_000_000)],now)
+assert 'server-offline-pending' in alert_fixture([(now-60,0,None)],now)
+assert 'server-offline' in alert_fixture([(now-60,0,None),(now-120,0,None),(now-180,0,None)],now)
+assert 'server-offline' not in alert_fixture([(now-60,0,None),(now-300,0,None),(now-360,0,None)],now)
+warn=2*1024**3
+assert 'ram-high' in alert_fixture([(now-60,1,warn),(now-120,1,warn),(now-180,1,warn)],now)
+assert 'ram-high' not in alert_fixture([(now-60,1,None),(now-120,1,warn),(now-180,1,warn)],now)
+crit=3*1024**3
+assert 'ram-critical' in alert_fixture([(now-60,1,crit),(now-120,1,crit),(now-180,1,crit)],now)
+events=[(now-60*i, i%2,400_000_000) for i in range(1,9)]
+assert 'restart-loop' in alert_fixture(events,now)
+gapped=[(now-60,1,300_000_000),(now-400,0,300_000_000),(now-460,1,300_000_000)]
+assert 'restart-loop' not in alert_fixture(gapped,now)
+print('OK: consecutive offline/RAM rules, stale detection and observed restart loops')
