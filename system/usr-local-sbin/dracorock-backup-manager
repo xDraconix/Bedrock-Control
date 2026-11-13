@@ -9,6 +9,7 @@ import fcntl
 import hashlib
 import json
 import os
+import pwd
 from pathlib import Path
 import re
 import stat
@@ -72,8 +73,9 @@ def check_backup_dir():
     require(BACKUPS.is_dir() and not BACKUPS.is_symlink(),
             "Backup-Verzeichnis fehlt oder ist unsicher")
     info = BACKUPS.stat()
-    require(info.st_uid == 0 and not (stat.S_IMODE(info.st_mode) & 0o022),
-            "Backup-Verzeichnis muss root gehoeren und darf nicht weltweit beschreibbar sein")
+    allowed_uids = {0, pwd.getpwnam("mcserver").pw_uid}
+    require(info.st_uid in allowed_uids and not (stat.S_IMODE(info.st_mode) & 0o022),
+            "Backup-Verzeichnis muss root oder mcserver gehoeren und darf nicht gruppen-/weltbeschreibbar sein")
 
 
 def digest(path):
