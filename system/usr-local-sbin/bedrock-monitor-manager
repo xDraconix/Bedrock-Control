@@ -134,6 +134,79 @@ def take_sample(db, now, online, cpu_ns, ram_bytes, players):
     return {'ts':now,'online':bool(online),'cpu_pct':cpu_pct,
             'ram_bytes':ram_bytes,'players':players}
 
+# v3.1: deterministic, read-only alert evaluation. No automatic restart or notifications.
+ALERT_STALE_SECONDS = 180
+ALERT_MAX_GAP_SECONDS = 150
+RAM_WARN_BYTES = 2 * 1024 ** 3
+RAM_CRITICAL_BYTES = 3 * 1024 ** 3
+
+def monitoring_alerts(db, now):
+    """Live diagnosis from raw one-minute samples; never infer a missing value as 0.
+
+    History window selection does not change the diagnosis. Alerts deliberately
+    depend on consecutive samples so short service restarts do not generate noise.
+    """
+    rows = db.execute(
+        'SELECT ts,online,ram_bytes FROM samples WHERE ts >= ? AND ts <= ? '
+        'ORDER BY ts DESC LIMIT 50', (now - 3600, now)).fetchall()
+    alerts = []
+    def add(code, severity, title, message):
+        alerts.append({'code':code,'severity':severity,'title':title,'message':message})
+    if not rows:
+        add('no-data','warning','Noch keine Messwerte',
+            'Der Monitoring-Timer hat innerhalb der letzten Stunde keine Messung gespeichert.')
+        return alerts
+    latest_ts = rows[0][0]
+    if now - latest_ts > ALERT_STALE_SECONDS:
+        add('collector-stale','critical','Monitoring ausgefallen',
+            'Letzte Messung vor mehr als 3 Minuten. bedrock-monitor.timer und Dienstprotokolle prüfen.')
+        return alerts
+
+    # Only strictly adjacent observations count toward a persistent incident.
+    def streak(predicate):
+        count = 0
+        previous_ts = None
+        for ts, online, ram in rows:
+            if previous_ts is not None and previous_ts - ts > ALERT_MAX_GAP_SECONDS:
+                break
+            if not predicate(online, ram):
+                break
+            count += 1
+            previous_ts = ts
+        return count
+
+    offline_count = streak(lambda online, ram: online == 0)
+    if offline_count >= 3:
+        add('server-offline','critical','Minecraft-Dienst offline',
+            'Mindestens 3 aufeinanderfolgende Messungen melden einen inaktiven Dienst.')
+    elif rows[0][1] == 0:
+        add('server-offline-pending','warning','Minecraft-Dienst momentan offline',
+            'Offline-Status erkannt; länger anhaltende Ausfälle werden nach 3 Messungen kritisch.')
+
+    # A missing RAM reading is neither success nor alarm.
+    for limit, severity, code, label in (
+        (RAM_CRITICAL_BYTES,'critical','ram-critical','3 GiB'),
+        (RAM_WARN_BYTES,'warning','ram-high','2 GiB'),
+    ):
+        if streak(lambda online, ram: online == 1 and ram is not None and ram >= limit) >= 3:
+            add(code,severity,'Hohe Minecraft-RAM-Auslastung',
+                'Dienstspeicher seit mindestens 3 Messungen über '+label+'.')
+            break
+
+    # Count observed offline -> online transitions, not CPU counter resets:
+    # missing samples cannot prove a restart.
+    chronological = list(reversed([r for r in rows if r[0] >= now - 1800]))
+    starts = 0
+    for previous,current in zip(chronological,chronological[1:]):
+        if (0 < current[0] - previous[0] <= ALERT_MAX_GAP_SECONDS
+                and previous[1] == 0 and current[1] == 1):
+            starts += 1
+    if starts >= 3:
+        add('restart-loop','warning','Wiederholte Serverstarts',
+            'Mindestens 3 Wechsel von offline zu online in 30 Minuten erkannt.')
+
+    return alerts
+
 def history(db, window, now):
     if window not in WINDOWS:
         raise ValueError('Ungültiges Zeitfenster')
@@ -161,7 +234,9 @@ def history(db, window, now):
     return {'ok':True,'window':window,'bucket_seconds':bucket,'points':points,
             'samples_count':sum(p['samples'] for p in points),
             'latest':dict(zip(('ts','online','cpu_pct','ram_bytes','players'),latest)) if latest else None,
-            'retention_days':30,'interval_seconds':60}
+            'retention_days':30,'interval_seconds':60,
+            'alerts':monitoring_alerts(db,now),
+            'alert_policy':{'stale_seconds':ALERT_STALE_SECONDS,'ram_warning_gib':2,'ram_critical_gib':3}}
 
 def main():
     if len(sys.argv) < 2:
