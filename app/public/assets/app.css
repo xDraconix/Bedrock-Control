@@ -531,10 +531,8 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
  white-space:normal;
 }
 @media(max-width:1150px){
- #overview .overview-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
- #overview .overview-controls>.dashboard-alert-card{grid-column:1/-1}
+ #overview .overview-controls{grid-template-columns:1fr}
 }
 @media(max-width:700px){
- #overview .overview-controls{grid-template-columns:1fr}
- #overview .overview-controls>.dashboard-alert-card{grid-column:auto}
+ #overview .dashboard-alert-card{padding:17px}
 }
