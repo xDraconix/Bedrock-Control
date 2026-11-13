@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the v3.0.0 visual rename without breaking legacy signed installs."""
+"""Guard the DracoRock visual rename without breaking legacy signed installs."""
 from pathlib import Path
 import re
 import unittest
@@ -19,18 +19,18 @@ class DracoRockBrandingTests(unittest.TestCase):
         cls.applier=(ROOT/'system/usr-local-bin/bedrock-panel-apply-release').read_text()
 
     def test_version_and_visible_branding(self):
-        self.assertEqual((ROOT/'VERSION').read_text().strip(),'3.0.0')
+        self.assertEqual((ROOT/'VERSION').read_text().strip(),'3.1.0')
         for marker in ('<title>DracoRock Control</title>',
                        'DRACOROCK <span>CONTROL</span>',
                        '<b>DRACOROCK</b><small>CONTROL <span class="brand-version">/ 3.0</span></small>',
                        'DracoRock Control aktualisieren',
-                       'DRACOROCK CONTROL v3.0.0'):
+                       'DRACOROCK CONTROL v3.1.0'):
             self.assertIn(marker,self.page)
         self.assertNotIn('BEDROCK CONTROL PRO',self.page)
         self.assertNotIn('<title>Bedrock Control PRO</title>',self.page)
 
     def test_asset_versions(self):
-        self.assertIn('assets/app.js?v=3.0.0',self.page)
+        self.assertIn('assets/app.js?v=3.1.0',self.page)
         self.assertIn('assets/app.css?v=3.0.0',self.page)
 
     def test_original_logo_and_safe_asset(self):
@@ -51,7 +51,7 @@ class DracoRockBrandingTests(unittest.TestCase):
         self.assertIn('border-left:3px solid #4c8295', css)
         self.assertIn('.monitor-stat,.monitor-chart-panel{', css)
         self.assertIn('.server-state.online,.pill.online', css)
-        self.assertIn('assets/app.css?v=3.0.0-petrol3', self.page)
+        self.assertIn('assets/app.css?v=3.1.0', self.page)
 
     def test_legacy_green_containers_replaced(self):
         css=(ROOT/'app/public/assets/app.css').read_text()
@@ -67,7 +67,7 @@ class DracoRockBrandingTests(unittest.TestCase):
         self.assertIn('background:#0e222b', css)
         self.assertIn('background:linear-gradient(110deg,#142934,#19303b)', css)
         self.assertIn('background:linear-gradient(150deg,#172b35,#192d36)', css)
-        self.assertIn('assets/app.css?v=3.0.0-petrol3', self.page)
+        self.assertIn('assets/app.css?v=3.1.0', self.page)
 
     def test_repository_links(self):
         self.assertIn('xDraconix/DracoRock-Control',self.readme)
