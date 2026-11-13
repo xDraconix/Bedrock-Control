@@ -502,7 +502,10 @@ footer{border-top:1px solid #32494d;padding-top:20px;color:#92a9ad}
  grid-template-columns:minmax(0,1.2fr) minmax(0,0.85fr) minmax(0,1.2fr);
  gap:16px;
  align-items:stretch;
- margin-top:18px;
+ /* Metric cards already provide 18px below the first row; avoid double spacing. */
+ margin-top:0;
+ /* The middle row has zero card margins, so create the next row gap here. */
+ margin-bottom:18px;
 }
 #overview .overview-controls>.card{min-width:0;margin-bottom:0}
 #overview .dashboard-alert-card{
