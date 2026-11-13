@@ -2,6 +2,8 @@
 import importlib.machinery
 import importlib.util
 import json
+import os
+from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,6 +35,18 @@ class BackupEngineTests(unittest.TestCase):
         for item in (self.patch_server, self.patch_backups, self.patch_offline, self.patch_dir):
             item.start()
             self.addCleanup(item.stop)
+
+    def test_existing_mcserver_owned_backup_directory(self):
+        self.patch_dir.stop()
+        try:
+            self.backups.chmod(0o750)
+            with patch.object(engine.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=os.getuid())):
+                engine.check_backup_dir()
+                self.backups.chmod(0o770)
+                with self.assertRaises(engine.BackupError):
+                    engine.check_backup_dir()
+        finally:
+            self.patch_dir.start()
 
     def test_preflight_without_service_changes(self):
         files, total = engine.check_source()
