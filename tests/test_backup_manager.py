@@ -34,6 +34,25 @@ class BackupEngineTests(unittest.TestCase):
             item.start()
             self.addCleanup(item.stop)
 
+    def test_preflight_without_service_changes(self):
+        files, total = engine.check_source()
+        self.assertEqual(files, 2)
+        self.assertGreater(total, 0)
+
+    def test_archive_name_validation(self):
+        result = engine.create()
+        self.assertTrue(engine.NAME_RE.fullmatch(result["archive"]))
+        self.assertFalse(engine.NAME_RE.fullmatch(result["archive"] + ".json"))
+
+    def test_backup_worker_preflights_and_restarts(self):
+        worker = (Path(__file__).resolve().parents[1] /
+                  "system/usr-local-sbin/bedrock-panel-update-worker").read_text()
+        self.assertIn('"$ENGINE" preflight', worker)
+        self.assertIn("trap 'restart_minecraft", worker)
+        self.assertLess(worker.index('"$ENGINE" preflight'),
+                        worker.index('/usr/bin/systemctl stop "$SERVICE"'))
+        self.assertIn('"$ENGINE" create', worker)
+
     def test_create_and_verify(self):
         result = engine.create()
         self.assertEqual(result["files"], 2)
