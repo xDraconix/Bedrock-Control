@@ -23,6 +23,8 @@ with tempfile.TemporaryDirectory() as tmp:
     assert result['mode']=='plan-only'
     assert result['minecraft_untouched'] is True
     assert len(result['system_components'])==len(mod.REQUIRED)
+    assert 'system/usr-local-sbin/dracorock-backup-manager' in mod.REQUIRED
+    assert any(x['target']=='/usr/local/sbin/dracorock-backup-manager' for x in result['system_components'])
     assert all(x['target'].startswith(('/usr/local/','/etc/')) for x in result['system_components'])
     assert all('/home/mcserver/' not in x['target'] for x in result['system_components'])
     write(source,'system/minecraft/update-mc2.sh',b'NEVER INSTALL THIS\n')
