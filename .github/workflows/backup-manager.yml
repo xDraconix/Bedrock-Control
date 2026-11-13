@@ -23,5 +23,7 @@ jobs:
       - name: Compile backup engine and tests
         run: |
           python3 -m py_compile system/usr-local-sbin/dracorock-backup-manager tests/test_backup_manager.py
+      - name: Validate backup worker and installer shell syntax
+        run: bash -n system/usr-local-sbin/bedrock-panel-update-worker install.sh
       - name: Run isolated backup engine tests
         run: python3 -m unittest discover -s tests -p test_backup_manager.py -v
