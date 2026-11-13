@@ -45,6 +45,8 @@ jobs:
           PY
       - name: Test DracoRock branding and signed legacy compatibility
         run: python3 tests/test_dracorock_branding.py
+      - name: Test official Mojang Bedrock update detection
+        run: python3 tests/test_bedrock_update_check.py
       - name: Test repository migration release lookup
         run: python3 tests/test_repository_migration.py
       - name: Test player roster and console command validation
