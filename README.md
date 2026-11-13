@@ -2,6 +2,10 @@
 
 DracoRock Control verwaltet einen **Minecraft Bedrock Dedicated Server auf Debian 13** über ein lokales Webpanel. Minecraft kann auf einem frischen Debian-System direkt über das Panel installiert werden.
 
+## In Entwicklung: v3.1.0 – Intelligente Serverüberwachung
+
+Die vorhandenen Monitoring-Messungen werden auf Ausfälle des Messdatensammlers, länger andauernde Serverausfälle, wiederholte beobachtete Neustarts und hohe Dienst-RAM-Werte geprüft. Im Live-Monitoring werden diese Warnungen mit Schweregrad eingeblendet. **Kein automatischer Neustart, keine externe Benachrichtigung; ausschließlich Testbranch.** Details und Grenzwerte: [v3.1.0 Entwicklungsnotizen](docs/releases/v3.1.0.md).
+
 ## Version
 
 **v2.9.0 Stable** ist die veröffentlichte Version von DracoRock Control. **v3.0.0** ist der nächste, noch unveröffentlichte Design-Entwicklungsstand.
