@@ -288,6 +288,42 @@ function renderMonitoringAlerts(alerts){
   item.append(title,message);root.append(item);
  }
 }
+// Overview reuses the authenticated, read-only monitoring history API.
+let dashboardAlertsBusy=false;
+async function loadDashboardAlerts(){
+ if(dashboardAlertsBusy||$('app').hidden||$('overview').hidden)return;
+ dashboardAlertsBusy=true;
+ try{
+  const data=await api('monitor-history&window=1h');
+  const root=$('dashboardAlerts');
+  root.replaceChildren();
+  if(!Array.isArray(data.alerts))throw Error('Warnstatus fehlt');
+  const alerts=data.alerts.slice(0,8);
+  if(!alerts.length){
+   const ok=document.createElement('div');
+   ok.className='monitor-alert monitor-alert-ok';
+   ok.textContent='✓ Keine aktuellen Warnungen – Monitoring unauffällig.';
+   root.append(ok);
+  }else{
+   for(const alert of alerts){
+    if(!alert||typeof alert.title!=='string'||typeof alert.message!=='string')continue;
+    const item=document.createElement('div');
+    item.className='monitor-alert monitor-alert-'+(alert.severity==='critical'?'critical':'warning');
+    const title=document.createElement('strong');title.textContent=alert.title;
+    const description=document.createElement('p');description.textContent=alert.message;
+    item.append(title,description);root.append(item);
+   }
+  }
+ }catch(error){
+  const root=$('dashboardAlerts');
+  root.replaceChildren();
+  const note=document.createElement('p');note.className='muted tiny';
+  note.textContent='Warnstatus nicht verfügbar – Live-Monitoring prüfen.';
+  root.append(note);
+ }finally{dashboardAlertsBusy=false}
+}
+$('dashboardAlertsDetail').addEventListener('click',()=>document.querySelector('[data-tab="monitor"]').click());
+setInterval(()=>{if(!$('app').hidden&&!$('overview').hidden)loadDashboardAlerts()},60000);
 async function loadMonitoring(){
  if(monitoringBusy)return;
  monitoringBusy=true;txt('monitorState','Lade historische Messwerte …');
@@ -314,7 +350,7 @@ $('monitorWindow').addEventListener('change',e=>{monitoringWindow=e.target.value
 window.addEventListener('resize',()=>{if(!$('monitor').hidden){redrawMonitoring();monitorTooltip()}});
 setInterval(()=>{if(!$('app').hidden&&!$('monitor').hidden)loadMonitoring()},60000);
 
-async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs()}async function action(name){
+async function backups(){try{const d=await api('backups');const el=$('backupList');el.replaceChildren();if(!d.files.length){el.textContent='Noch keine Backups gefunden.';return}for(const f of d.files){const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');a.textContent=f.name;b.textContent=fmt(f.size)+' · '+f.date;row.append(a,b);el.append(row)}}catch(e){showNotice(e.message,true)}}async function logs(){try{const d=await api('logs&type='+encodeURIComponent($('logType').value));txt('logOutput',d.logs||'Keine Einträge.')}catch(e){showNotice(e.message,true)}}function refreshAll(){status();backups();logs();loadDashboardAlerts()}async function action(name){
  if(busy)return;
  const labels={start:'Server starten',stop:'Server stoppen',restart:'Server neu starten',update:'Update starten (Server wird ggf. neu gestartet)',backup:'Backup erstellen (kurze Unterbrechung möglich)'};
  if(!confirm(labels[name]+'?'))return;
