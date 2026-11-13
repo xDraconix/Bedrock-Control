@@ -25,6 +25,7 @@ SOURCES = [
     Path('/usr/local/bin/bedrock-panel-update-test'),
     Path('/usr/local/bin/bedrock-panel-apply-release'),
     Path('/usr/local/bin/bedrock-panel-system-plan'),
+    Path('/usr/local/sbin/dracorock-backup-manager'),
     Path('/etc/systemd/system/bedrock-panel-self-update.service'),
     Path('/etc/apache2/sites-available/bedrock-control-pro.conf'),
     Path('/etc/sudoers.d/bedrock-control-pro'),
