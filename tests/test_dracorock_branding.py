@@ -31,7 +31,7 @@ class DracoRockBrandingTests(unittest.TestCase):
 
     def test_asset_versions(self):
         self.assertIn('assets/app.js?v=3.1.0',self.page)
-        self.assertIn('assets/app.css?v=3.0.0',self.page)
+        self.assertIn('assets/app.css?v=3.1.0',self.page)
 
     def test_original_logo_and_safe_asset(self):
         logo=(ROOT/'app/public/assets/dracorock-mark.svg').read_text()
