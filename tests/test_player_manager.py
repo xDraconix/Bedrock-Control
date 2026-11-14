@@ -94,6 +94,15 @@ assert mod.parse_online_list('[2026-11-08 14:26:36:355 INFO] There are 0/10 play
 assert mod.parse_online_list('Some old player joined') is None
 assert mod.parse_online_list('[2026-11-08 14:26:36:355 INFO] There are 1/10 players online:\nBad"name\n') is None
 
+# Bedrock can print multiple gamertags on one line.
+roster_header = '[2026-11-14 19:34:36:781 INFO] There are 2/10 players online:\n'
+parsed = mod.parse_online_list(roster_header + 'Example Player, SecondPlayer\n')
+assert parsed['players'] == ['Example Player', 'SecondPlayer']
+assert parsed['count'] == 2 and parsed['max_players'] == 10
+assert mod.parse_online_list(roster_header + 'First,, Second\n') is None
+assert mod.parse_online_list(roster_header + 'First, First\n') is None
+assert mod.parse_online_list(roster_header + 'First, Second, Third\n') is None
+
 # A new response must be distinct from the preexisting screen history.
 existing=sample+'list\n'
 fresh=existing+'''[2026-11-08 15:30:08:015 INFO] There are 2/10 players online:

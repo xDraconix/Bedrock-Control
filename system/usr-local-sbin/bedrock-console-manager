@@ -45,7 +45,7 @@ def parse_online_list(output):
     if count>1000 or limit>1000 or count>limit:
         return None
     lines=output[match.end():].splitlines()
-    # The header is followed by one gamertag per line in Bedrock 1.26.63.1.
+    # Bedrock can emit one gamertag per line or a comma-separated roster.
     names=[]
     for line in lines:
         value=line.strip()
@@ -53,9 +53,10 @@ def parse_online_list(output):
             continue
         if len(names)==count:
             break
-        if not PLAYER_NAME.fullmatch(value) or value.startswith('['):
+        entries = [entry.strip() for entry in value.split(',')]
+        if any(not PLAYER_NAME.fullmatch(entry) or entry.startswith('[') for entry in entries):
             return None
-        names.append(value)
+        names.extend(entries)
     if len(names)!=count or len(set(names))!=count:
         return None
     return {'players':names,'count':count,'max_players':limit,
