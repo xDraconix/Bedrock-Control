@@ -52,7 +52,11 @@ else
    echo 'Verifizierter Backup-Manager fehlt; Minecraft bleibt unveraendert' >&2
    exit 1
  }
- /usr/bin/install -d -m 0750 -o root -g root "$BACKUPS"
+ # Preserve existing mcserver ownership and permissions; never chown backups.
+ [[ -d "$BACKUPS" && ! -L "$BACKUPS" ]] || {
+   echo 'Backup-Verzeichnis fehlt oder ist ein Symlink' >&2
+   exit 1
+ }
  "$ENGINE" preflight
  was_active=0
  if /usr/bin/systemctl is-active --quiet "$SERVICE"; then
