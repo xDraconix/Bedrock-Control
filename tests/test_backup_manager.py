@@ -62,6 +62,8 @@ class BackupEngineTests(unittest.TestCase):
         worker = (Path(__file__).resolve().parents[1] /
                   "system/usr-local-sbin/bedrock-panel-update-worker").read_text()
         self.assertIn('"$ENGINE" preflight', worker)
+        self.assertNotIn('install -d -m 0750 -o root -g root "$BACKUPS"', worker)
+        self.assertIn('[[ -d "$BACKUPS" && ! -L "$BACKUPS" ]]', worker)
         self.assertIn("trap 'restart_minecraft", worker)
         self.assertLess(worker.index('"$ENGINE" preflight'),
                         worker.index('/usr/bin/systemctl stop "$SERVICE"'))
